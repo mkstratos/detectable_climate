@@ -5,6 +5,8 @@ import subprocess as sp
 from pathlib import Path
 import datetime as dt
 import sys
+import json
+
 COMPONENT_NAMES = ["ATM", "CPL", "OCN", "WAV", "GLC", "ICE", "ROF", "LND", "ESP", "IAC"]
 
 def set_tasks(ninst, case_dir):
@@ -46,7 +48,12 @@ def main(build_case=False, run_case=False):
     else:
         sim_length = total_sim
 
-    ninst = 8
+    # Load a shorted list of output variables
+    output_vars = json.load(open("new_vars.json", "r"))
+    # Surround variable names in single quotes (e.g. T -> 'T')
+    output_vars = [f"'{_var}'" for _var in output_vars["default"]]
+
+    ninst = 30
 
     compset = "F2010"
     grid = "ne4_oQU240"
@@ -55,7 +62,7 @@ def main(build_case=False, run_case=False):
     compiler="intel"
     today = dt.datetime.now().strftime("%Y%m%d")
     branch = "maint-2.0"
-    case = f"{today}.{compset}.{grid}.dtcl_control"
+    case = f"{today}.{compset}.{grid}.dtcl_zmconv_c0_0p0022_n{ninst:04d}"
 
     case_dir = Path(os.environ["HOME"], "e3sm_scripts", case)
     case_dir = Path(os.getcwd(), case)
@@ -92,10 +99,13 @@ def main(build_case=False, run_case=False):
             nl_atm_file.write("pertlim = 1.0e-14\n")
             nl_atm_file.write("seed_custom = {}\n".format(iinst))
             nl_atm_file.write("seed_clock = .true.\n")
-            nl_atm_file.write(f"nhtfrq = {nhtfrq} \n")
-            nl_atm_file.write("avgflag_pertape = 'I' \n")
-            nl_atm_file.write("mfilt = 1\n")
-
+            nl_atm_file.write(f"nhtfrq = {nhtfrq}\n")
+            nl_atm_file.write("avgflag_pertape = 'I'\n")
+            nl_atm_file.write("mfilt = 400\n")
+            nl_atm_file.write(f"fincl1 = {', '.join(output_vars)}\n")
+            nl_atm_file.write("empty_htapes = .true.\n")
+            nl_atm_file.write("zmconv_c0_ocn = 0.0022\n")
+            nl_atm_file.write("zmconv_c0_lnd = 0.0022")
 
     print(f"{'*' * 20} PREVIEW {'*' * 20}")
     os.system("./preview_run")
