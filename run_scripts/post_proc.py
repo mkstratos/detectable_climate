@@ -49,13 +49,28 @@ def nco_aavg(in_file, overwrite=False, debug_only=True):
         print_cmd(wgt_avg)
 
 
+def combine_files(ninst, file_dir):
+
+    for i in range(1, ninst + 1):
+        _files = sorted(Path(file_dir).glob(f"*eam_{i:04d}*aavg.nc"))
+        # print(_files[0])
+        out_file = _files[0].name.split(".")
+        out_file = ".".join([*_files[0].name.split(".")[:-2], "nc"])
+        out_dir = Path(file_dir, "combined")
+        if not out_dir.exists():
+            print(f"CREATING COMBO DIR: {out_dir}")
+            out_dir.mkdir(parents=True)
+
+        sp.call(["ncrcat", *_files, Path(out_dir, out_file)])
+
 
 def main(overwrite=False, debug_only=True):
     """Post process an ensemble run."""
     scratch = Path("/lcrc/group/e3sm/ac.mkelleher/scratch/chrys/")
-    case = "20221128.F2010.ne4_oQU240.dtcl_control"
+    # case = "20221128.F2010.ne4_oQU240.dtcl_control"
+    case = "20221130.F2010.ne4_oQU240.dtcl_control_n0030"
     case_dir = Path(scratch, case, "run")
-    ninst = 8
+    ninst = 30
 
     case_files = sorted(case_dir.glob(f"{case}.eam_*.h0*.nc"))
 
@@ -74,6 +89,8 @@ def main(overwrite=False, debug_only=True):
         )
         results = _results.get()
     print(f"{'#' * 20}COMPLETED{'#' * 20}")
+    combine_files(ninst, case_dir)
+
 
 if __name__ == "__main__":
     main(overwrite=True, debug_only=False)
