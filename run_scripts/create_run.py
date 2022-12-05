@@ -19,7 +19,7 @@ def set_tasks(ninst, case_dir):
             os.system(f"./xmlchange NINST_{comp}={ninst}")
 
 
-def compute_run_wc(nmonths, spmd=4, wiggle=1.1):
+def compute_run_wc(nmonths, spmd=8, wiggle=1.1):
     run_days = nmonths * 30
     total_time = dt.timedelta(seconds=(run_days * spmd) * wiggle)
     days = total_time.days
@@ -62,7 +62,7 @@ def main(build_case=False, run_case=False):
     compiler="intel"
     today = dt.datetime.now().strftime("%Y%m%d")
     branch = "maint-2.0"
-    case = f"{today}.{compset}.{grid}.dtcl_zmconv_c0_0p0022_n{ninst:04d}"
+    case = f"{today}.{compset}.{grid}.dtcl_zmconv_c0_0p00201_n{ninst:04d}"
 
     case_dir = Path(os.environ["HOME"], "e3sm_scripts", case)
     case_dir = Path(os.getcwd(), case)
@@ -77,7 +77,8 @@ def main(build_case=False, run_case=False):
         str(Path(cime_scripts_dir, "create_newcase")),
         f"--compset {compset}",
         f"--res {grid}",
-        f"--walltime {wall_clock_request}",
+        # f"--walltime {wall_clock_request}",
+        f"--walltime 00:20:00",
         f"--case {case}",
         f"--machine {mach}",
         f"--ninst {ninst}",
@@ -104,8 +105,8 @@ def main(build_case=False, run_case=False):
             nl_atm_file.write("mfilt = 400\n")
             nl_atm_file.write(f"fincl1 = {', '.join(output_vars)}\n")
             nl_atm_file.write("empty_htapes = .true.\n")
-            nl_atm_file.write("zmconv_c0_ocn = 0.0022\n")
-            nl_atm_file.write("zmconv_c0_lnd = 0.0022")
+            nl_atm_file.write("zmconv_c0_ocn = 0.00201\n")
+            nl_atm_file.write("zmconv_c0_lnd = 0.00201")
 
     print(f"{'*' * 20} PREVIEW {'*' * 20}")
     os.system("./preview_run")
