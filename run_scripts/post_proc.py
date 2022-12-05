@@ -35,6 +35,8 @@ def nco_aavg(in_file, overwrite=False, debug_only=True):
         "-o",
         aavg_outfile,
     ]
+
+    print(f"\tSTART AVG: {in_file.name.split('.')[-2]}")
     if (not overwrite and aavg_outfile.exists()) or "aavg" in in_file.name:
         print(f"{aavg_outfile} exists")
 
@@ -47,6 +49,7 @@ def nco_aavg(in_file, overwrite=False, debug_only=True):
 
     else:
         print_cmd(wgt_avg)
+    print(f"\t  END AVG: {in_file.name.split('.')[-2]}")
 
 
 def combine_files(ninst, file_dir):
@@ -66,30 +69,37 @@ def combine_files(ninst, file_dir):
 
 def main(overwrite=False, debug_only=True):
     """Post process an ensemble run."""
+    serial = False
     scratch = Path("/lcrc/group/e3sm/ac.mkelleher/scratch/chrys/")
     # case = "20221128.F2010.ne4_oQU240.dtcl_control"
     case = "20221130.F2010.ne4_oQU240.dtcl_control_n0030"
+
+    # case = "20221201.F2010.ne4_oQU240.dtcl_zmconv_c0_0p0022_n0030"
     case_dir = Path(scratch, case, "run")
     ninst = 30
 
     case_files = sorted(case_dir.glob(f"{case}.eam_*.h0*.nc"))
+    case_files = [_file for _file in case_files if "aavg" not in _file.name]
 
-    pool_size = min(NCPU, len(case_files))
-    print(f"DO AREA AVG TO {len(case_files)} FILES WITH {pool_size} PROCESSES")
-    print(f"    {case_files[0].name}")
-
-    with mp.Pool(pool_size) as pool:
-        _results = pool.map_async(
-            partial(
-                nco_aavg,
-                overwrite=overwrite,
-                debug_only=debug_only,
-            ),
-            case_files,
-        )
-        results = _results.get()
-    print(f"{'#' * 20}COMPLETED{'#' * 20}")
-    combine_files(ninst, case_dir)
+    if serial:
+        for _file in case_files:
+            nco_aavg(_file, overwrite=overwrite, debug_only=debug_only)
+    else:
+        pool_size = min(NCPU, len(case_files))
+        print(f"DO AREA AVG TO {len(case_files)} FILES WITH {pool_size} PROCESSES")
+        print(f"    {case_files[0].name}")
+        with mp.Pool(pool_size) as pool:
+            _results = pool.map_async(
+                partial(
+                    nco_aavg,
+                    overwrite=overwrite,
+                    debug_only=debug_only,
+                ),
+                case_files,
+            )
+            results = _results.get()
+        print(f"{'#' * 20}COMPLETED{'#' * 20}")
+        # combine_files(ninst, case_dir)
 
 
 if __name__ == "__main__":
