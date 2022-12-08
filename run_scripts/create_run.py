@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# compset=GMPAS-NYF
 import os
 import subprocess as sp
 from pathlib import Path
@@ -14,7 +13,7 @@ def set_tasks(ninst, case_dir):
     for comp in COMPONENT_NAMES:
         _out = sp.run(["./xmlquery", f"NTASKS_{comp}"], check=True, stdout=sp.PIPE)
         ntasks = int(_out.stdout.strip().split()[1])
-        os.system(f"./xmlchange NTASKS_{comp}={ntasks * ninst}")
+        os.system(f"./xmlchange NTASKS_{comp}={ntasks * ninst / 3}")
         if comp != "CPL":
             os.system(f"./xmlchange NINST_{comp}={ninst}")
 
@@ -53,7 +52,7 @@ def main(build_case=False, run_case=False):
     # Surround variable names in single quotes (e.g. T -> 'T')
     output_vars = [f"'{_var}'" for _var in output_vars["default"]]
 
-    ninst = 30
+    ninst = 50
 
     compset = "F2010"
     grid = "ne4_oQU240"
@@ -62,30 +61,30 @@ def main(build_case=False, run_case=False):
     compiler="intel"
     today = dt.datetime.now().strftime("%Y%m%d")
     branch = "maint-2.0"
-    case = f"{today}.{compset}.{grid}.dtcl_zmconv_c0_0p00201_n{ninst:04d}"
+
+    zmconv_c0 = 0.0020
+    zmconv_str = f"{zmconv_c0:.04f}".replace('.', 'p')
+
+    case = f"{today}.{compset}.{grid}.dtcl_zmconv_c0_{zmconv_str}_n{ninst:04d}"
 
     case_dir = Path(os.environ["HOME"], "e3sm_scripts", case)
     case_dir = Path(os.getcwd(), case)
     cime_scripts_dir = Path(
-        # os.environ["HOME"], "baseline", "mpas-multi-inst", "E3SM", "cime", "scripts"
-        # os.environ["HOME"], "baseline", "maint-1.1", "E3SM", "cime", "scripts"
         os.environ["HOME"], "baseline", branch, "E3SM", "cime", "scripts"
     )
-    wall_clock_request = compute_run_wc(total_sim)
+    # wall_clock_request = compute_run_wc(total_sim)
 
     create_script = [
         str(Path(cime_scripts_dir, "create_newcase")),
         f"--compset {compset}",
         f"--res {grid}",
-        # f"--walltime {wall_clock_request}",
-        f"--walltime 00:20:00",
+        f"--walltime 01:00:00",
         f"--case {case}",
         f"--machine {mach}",
         f"--ninst {ninst}",
         f"--compiler {compiler}",
-        # f"--queue compute",
-        # f"--pecount {PECOUNT}",
     ]
+
     print(f"{'*'*20}CREATING CASE{'*'*20}")
     print(" ".join(create_script))
     os.system(" ".join(create_script))
@@ -105,8 +104,8 @@ def main(build_case=False, run_case=False):
             nl_atm_file.write("mfilt = 400\n")
             nl_atm_file.write(f"fincl1 = {', '.join(output_vars)}\n")
             nl_atm_file.write("empty_htapes = .true.\n")
-            nl_atm_file.write("zmconv_c0_ocn = 0.00201\n")
-            nl_atm_file.write("zmconv_c0_lnd = 0.00201")
+            nl_atm_file.write(f"zmconv_c0_ocn = {zmconv_c0}\n")
+            nl_atm_file.write(f"zmconv_c0_lnd = {zmconv_c0}")
 
     print(f"{'*' * 20} PREVIEW {'*' * 20}")
     os.system("./preview_run")
