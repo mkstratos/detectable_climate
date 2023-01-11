@@ -63,7 +63,7 @@ def nco_aavg(in_file, overwrite=False, debug_only=True):
         aavg_outfile,
     ]
 
-    print(f"\tSTART AVG: {in_file.name.split('.')[-2]}")
+    # print(f"\tSTART AVG: {in_file.name.split('.')[-2]}")
     if (not overwrite and aavg_outfile.exists()) or "aavg" in in_file.name:
         print(f"{aavg_outfile} exists")
 
@@ -76,7 +76,7 @@ def nco_aavg(in_file, overwrite=False, debug_only=True):
 
     else:
         print_cmd(wgt_avg)
-    print(f"\t  END AVG: {in_file.name.split('.')[-2]}")
+    # print(f"\t  END AVG: {in_file.name.split('.')[-2]}")
 
 
 def combine_files(ninst, file_dir):
@@ -144,6 +144,8 @@ def main(cl_args):
     case_files = sorted(case_dir.glob(f"{case}.eam_*.h0*.nc"))
     case_files = [_file for _file in case_files if "aavg" not in _file.name]
 
+
+
     if serial:
         for _file in case_files:
             nco_aavg(_file, overwrite=overwrite, debug_only=debug_only)
@@ -151,7 +153,8 @@ def main(cl_args):
         _check = sp.check_output(["ncdump", "-v", "T", _file])
         print("\t" + " ".join(_check.decode().split("\n")[-4:-3]).strip())
     else:
-        pool_size = min(NCPU, len(case_files))
+        # pool_size = min(NCPU, len(case_files) // 2)
+        pool_size = 2
         print(f"DO AREA AVG TO {len(case_files)} FILES WITH {pool_size} PROCESSES")
         print(f"    {case_files[0].name}")
         with mp.Pool(pool_size) as pool:

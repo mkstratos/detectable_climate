@@ -13,7 +13,11 @@ def set_tasks(ninst, case_dir):
     for comp in COMPONENT_NAMES:
         _out = sp.run(["./xmlquery", f"NTASKS_{comp}"], check=True, stdout=sp.PIPE)
         ntasks = int(_out.stdout.strip().split()[1])
-        os.system(f"./xmlchange NTASKS_{comp}={ntasks * ninst / 3}")
+        if ntasks == 1:
+            os.system(f"./xmlchange NTASKS_{comp}={ntasks * ninst}")
+        else:
+            os.system(f"./xmlchange NTASKS_{comp}={ntasks * ninst / 3}")
+
         if comp != "CPL":
             os.system(f"./xmlchange NINST_{comp}={ninst}")
 
@@ -52,7 +56,7 @@ def main(build_case=False, run_case=False):
     # Surround variable names in single quotes (e.g. T -> 'T')
     output_vars = [f"'{_var}'" for _var in output_vars["default"]]
 
-    ninst = 50
+    ninst = 90
 
     compset = "F2010"
     grid = "ne4_oQU240"
@@ -62,7 +66,7 @@ def main(build_case=False, run_case=False):
     today = dt.datetime.now().strftime("%Y%m%d")
     branch = "maint-2.0"
 
-    zmconv_c0 = 0.0020
+    zmconv_c0 = 0.0030
     zmconv_str = f"{zmconv_c0:.04f}".replace('.', 'p')
 
     case = f"{today}.{compset}.{grid}.dtcl_zmconv_c0_{zmconv_str}_n{ninst:04d}"
