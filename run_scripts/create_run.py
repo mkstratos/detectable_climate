@@ -56,7 +56,7 @@ def main(build_case=False, run_case=False):
     # Surround variable names in single quotes (e.g. T -> 'T')
     output_vars = [f"'{_var}'" for _var in output_vars["default"]]
 
-    ninst = 90
+    ninst = 120
 
     compset = "F2010"
     grid = "ne4_oQU240"
@@ -66,8 +66,8 @@ def main(build_case=False, run_case=False):
     today = dt.datetime.now().strftime("%Y%m%d")
     branch = "maint-2.0"
 
-    zmconv_c0 = 0.0030
-    zmconv_str = f"{zmconv_c0:.04f}".replace('.', 'p')
+    zmconv_c0 = 0.00205
+    zmconv_str = f"{zmconv_c0:.05f}".replace('.', 'p')
 
     case = f"{today}.{compset}.{grid}.dtcl_zmconv_c0_{zmconv_str}_n{ninst:04d}"
 
@@ -82,7 +82,7 @@ def main(build_case=False, run_case=False):
         str(Path(cime_scripts_dir, "create_newcase")),
         f"--compset {compset}",
         f"--res {grid}",
-        f"--walltime 01:00:00",
+        f"--walltime 00:20:00",
         f"--case {case}",
         f"--machine {mach}",
         f"--ninst {ninst}",
