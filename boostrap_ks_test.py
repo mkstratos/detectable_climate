@@ -1,6 +1,7 @@
 """Perform many K-S tests comparing two E3SM ensembles.
 """
 import json
+import time
 import random
 from pathlib import Path
 import argparse
@@ -17,14 +18,15 @@ plt.style.use("ggplot")
 
 CASES = {
     "ctl": "20221130.F2010.ne4_oQU240.dtcl_control_n0030",
+    "2p5pct": "20230123.F2010.ne4_oQU240.dtcl_zmconv_c0_0p00205_n0120",
     "5pct": "20221205.F2010.ne4_oQU240.dtcl_zmconv_c0_0p00201_n0030",
     "10pct": "20221201.F2010.ne4_oQU240.dtcl_zmconv_c0_0p0022_n0030",
-    "50pct": "20221205.F2010.ne4_oQU240.dtcl_zmconv_c0_0p0030_n0030",
+    "50pct": "20221206.F2010.ne4_oQU240.dtcl_zmconv_c0_0p0030_n0030",
 }
 REJECT_THR = 0.05
 
 
-@dask.delayed
+# @dask.delayed
 def ks_all_times(data_1, data_2):
     """Perform K-S test on two arrays across all times in the array.
 
@@ -308,6 +310,7 @@ def ks_bootstrap(ens_data, case_abbr, dask_client, n_iter=5, test_size=30):
         futures.append(var_futures)
 
     results = da.array(dask.compute(*dask_client.gather(futures)))
+    results = results.compute()
     ks_stat = results[..., 0]
     ks_pval = results[..., 1]
     return ks_stat, ks_pval, np.array(random_index)
@@ -367,7 +370,27 @@ def output_data(ks_stat, ks_pval, rnd_idx, times, data_vars):
             "desc": "Index of ensemble members for each case and iteration",
         },
     )
-    return xr.Dataset({"stat": ks_stat_xr, "pval": ks_pval_xr, "index": rnd_idx})
+    return xr.Dataset({"stat": ks_stat_xr, "pval": ks_pval_xr, "rnd_idx": rnd_idx})
+
+
+def load_data(case_dirs, case_abbr):
+    files = {
+        _case: sorted(case_dirs[_case].glob(f"{CASES[_case]}.eam*aavg.nc"))
+        for _case in case_abbr
+    }
+
+    ens_data = {}
+    for _case in case_abbr:
+        ens_data[_case] = []
+        for _file in files[_case]:
+            ens_data[_case].append(
+                xr.open_dataset(
+                    _file,
+                )
+            )
+        ens_data[_case] = xr.concat(ens_data[_case], dim="ens")
+
+    return ens_data
 
 
 def main(case_a="ctl", case_b="5pct", n_iter=5):
@@ -390,42 +413,44 @@ def main(case_a="ctl", case_b="5pct", n_iter=5):
     case_abbr = [case_a, case_b]
     case_dirs = {_case: Path(scratch, CASES[_case], "run") for _case in case_abbr}
 
-    files = {
-        _case: sorted(case_dirs[_case].glob(f"{CASES[_case]}.eam*aavg.nc"))
-        for _case in case_abbr
-    }
     print("LOAD DATA")
-    ens_data = {}
-    for _case in case_abbr:
-        ens_data[_case] = xr.open_mfdataset(
-            files[_case], combine="nested", concat_dim="ens", parallel=True
-        )
+    # files = {
+    #     _case: sorted(case_dirs[_case].glob(f"{CASES[_case]}.eam*aavg.nc"))
+    #     for _case in case_abbr
+    # }
+    # ens_data = {}
+    # for _case in case_abbr:
+    #     ens_data[_case] = xr.open_mfdataset(
+    #         files[_case], combine="nested", concat_dim="ens", parallel=True
+    #     )
     # plot_single_var_summary(ens_data, case_abbr, test_var="T")
+    ens_data = load_data(case_dirs, case_abbr)
 
     print("LAUNCH CLIENT")
-    # client = Client(processes=False, n_workers=n_iter)
-    dask.config.config["distributed"]["dashboard"]["link"] = "{JUPYTERHUB_SERVICE_PREFIX}proxy/{host}:{port}/status"
-    client = Client(scheduler_file="sch.json")
-    print(client)
-    print(f"PERFORM {n_iter} TESTS")
-    ks_stat, ks_pval, rnd_indx = ks_bootstrap(
-        ens_data, case_abbr, client, n_iter=n_iter
-    )
-    print("OUTPUT TO FILE")
-    ds_out = output_data(ks_stat, ks_pval, rnd_indx, ens_data[case_abbr[0]]["times"])
-    ds_out.to_netcdf(f"bootstrap_output_{case_a}_{case_b}_n{n_iter}.nc")
+    # client = Client(n_workers=n_iter // 1.1)
+    with Client(n_workers=36, processes=True, interface="lo") as client:
+        # dask.config.config["distributed"]["dashboard"]["link"] = "{JUPYTERHUB_SERVICE_PREFIX}proxy/{host}:{port}/status"
+        # client = Client(scheduler_file="sch.json")
+        print(client)
+        print(f"PERFORM {n_iter} TESTS")
+        ks_stat, ks_pval, rnd_indx = ks_bootstrap(
+            ens_data, case_abbr, client, n_iter=n_iter
+        )
+        # client.shutdown()
+        time.sleep(1)
+        print("OUTPUT TO FILE")
+        ds_out = output_data(ks_stat, ks_pval, rnd_indx, ens_data[case_abbr[0]]["time"], test_vars)
+        ds_out.to_netcdf(f"bootstrap_output_{case_a}_{case_b}_n{n_iter}.nc")
 
 
 def parse_args(args=None):
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
-    parser.add_argument("--base", default=None, help="Short name of the base case.")
-    parser.add_argument("--test", default=None, help="Short name of the test case.")
+    parser.add_argument("--base", default="ctl", help="Short name of the base case.")
+    parser.add_argument("--test", default="5pct", help="Short name of the test case.")
     parser.add_argument(
-        "--iter",
-        default=5,
-        help="Number of bootstrap iterations to perform."
+        "--iter", default=5, help="Number of bootstrap iterations to perform."
     )
     return parser.parse_args()
 
@@ -433,4 +458,4 @@ def parse_args(args=None):
 if __name__ == "__main__":
     cl_args = parse_args()
     # case_a = cl_args.base
-    main(n_iter=int(cl_args.iter))
+    main(case_a=cl_args.base, case_b=cl_args.test, n_iter=int(cl_args.iter))
