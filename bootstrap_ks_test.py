@@ -17,12 +17,15 @@ from dask.distributed import Client
 plt.style.use("ggplot")
 
 CASES = {
-    "ctl": "20221130.F2010.ne4_oQU240.dtcl_control_n0030",
-    "2p5pct": "20230123.F2010.ne4_oQU240.dtcl_zmconv_c0_0p00205_n0120",
+    "ctl": "20230124.F2010.ne4_oQU240.dtcl_zmconv_c0_0p00200_n0120",
+    "2p5pct": "20230124.F2010.ne4_oQU240.dtcl_zmconv_c0_0p00205_n0120",
     "5pct": "20221205.F2010.ne4_oQU240.dtcl_zmconv_c0_0p00201_n0030",
     "10pct": "20221201.F2010.ne4_oQU240.dtcl_zmconv_c0_0p0022_n0030",
     "50pct": "20221206.F2010.ne4_oQU240.dtcl_zmconv_c0_0p0030_n0030",
+    "old-ctl": "20221130.F2010.ne4_oQU240.dtcl_control_n0030",
+    "old-2p5pct": "20230123.F2010.ne4_oQU240.dtcl_zmconv_c0_0p00205_n0120",
 }
+
 REJECT_THR = 0.05
 
 
