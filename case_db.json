@@ -1,0 +1,30 @@
+{
+    "1month": {
+        "ctl": "20230124.F2010.ne4_oQU240.dtcl_zmconv_c0_0p00200_n0120",
+        "0p5pct": "20221205.F2010.ne4_oQU240.dtcl_zmconv_c0_0p00201_n0030",
+        "2p5pct": "20230124.F2010.ne4_oQU240.dtcl_zmconv_c0_0p00205_n0120",
+        "5pct": "20221205.F2010.ne4_oQU240.dtcl_zmconv_c0_0p00201_n0030",
+        "10pct": "20221201.F2010.ne4_oQU240.dtcl_zmconv_c0_0p0022_n0030",
+        "50pct": "20221206.F2010.ne4_oQU240.dtcl_zmconv_c0_0p0030_n0030",
+        "old-ctl": "20221130.F2010.ne4_oQU240.dtcl_control_n0030",
+        "old-2p5pct": "20230123.F2010.ne4_oQU240.dtcl_zmconv_c0_0p00205_n0120",
+        "new-ctl": "20230403.F2010.ne4_oQU240.dtcl_zmconv_c0_0p00200_n0120",
+        "new-2p5pct": "20230325.F2010.ne4_oQU240.dtcl_zmconv_c0_0p00205_n0120",
+        "new-5pct": "20230403.F2010.ne4_oQU240.dtcl_zmconv_c0_0p00210_n0120",
+        "new-10pct": "20230329.F2010.ne4_oQU240.dtcl_zmconv_c0_0p00220_n0120",
+        "c1-1pct": "20230422.F2010.ne4_oQU240.dtcl_clubb_c1_2p4240_n0120",
+        "gworo-10pct": "20230515.F2010.ne4_oQU240.dtcl_effgw_oro_0p4125_n0120",
+        "gworo-1pct": "20230517.F2010.ne4_oQU240.dtcl_effgw_oro_0p37875_n0120"
+    },
+    "2month": {
+        "ctl": "20230126.F2010.ne4_oQU240.dtcl_zmconv_c0_0p00200_n0120",
+        "1pct": "20230126.F2010.ne4_oQU240.dtcl_zmconv_c0_0p00202_n0120"
+    },
+    "1year": {
+        "ctl": "20230321.F2010.ne4_oQU240.dtcl_pertlim_1e-10_n0120",
+        "pl_1e-14": "20230322.F2010.ne4_oQU240.dtcl_pertlim_1e-14_n0120",
+        "effgw_oro-0p5pct": "20230615.F2010.ne4_oQU240.dtcl_effwg_oro_0p376875_n0120",
+        "effgw_oro-1pct": "20230713.F2010.ne4_oQU240.dtcl_effgw_oro_0p3788_n0120",
+        "effgw_oro-10pct": "20230713.F2010.ne4_oQU240.dtcl_effgw_oro_0p412500_n0120"
+    }
+}
