@@ -7,6 +7,8 @@ import sys
 import json
 
 COMPONENT_NAMES = ["ATM", "CPL", "OCN", "WAV", "GLC", "ICE", "ROF", "LND", "ESP", "IAC"]
+"ATM" "CPL" "OCN" "WAV" "GLC" "ICE" "ROF" "LND" "ESP" "IAC"
+INIT_COND_FILE_TEMPLATE = "20210915.v2.ne4_oQU240.F2010.{}.{}.0003-{:02d}-01-00000.nc"
 
 def set_tasks(ninst, case_dir):
     os.chdir(case_dir)
@@ -40,10 +42,9 @@ def compute_run_wc(nmonths, spmd=8, wiggle=1.1):
 
 
 def main(build_case=False, run_case=False):
-
     model_component = "eam"
     stop_option = "nmonths"
-    total_sim = 1 # stop_options
+    total_sim = 14 # stop_options
     n_resub = 0
 
     if n_resub != 0:
@@ -61,15 +62,24 @@ def main(build_case=False, run_case=False):
     compset = "F2010"
     grid = "ne4_oQU240"
     mach = "chrysalis"
-    nhtfrq = 1
-    compiler="intel"
+    # mach = "anvil"
+    nhtfrq = None
+    compiler = "intel"
     today = dt.datetime.now().strftime("%Y%m%d")
     branch = "maint-2.0"
+    plim = 1e-10
 
-    zmconv_c0 = 0.00205
-    zmconv_str = f"{zmconv_c0:.05f}".replace('.', 'p')
-
-    case = f"{today}.{compset}.{grid}.dtcl_zmconv_c0_{zmconv_str}_n{ninst:04d}"
+    # zmconv_c0 = 0.0022
+    # zmconv_str = f"{zmconv_c0:.05f}".replace('.', 'p')
+    # clubb_c1 = 2.424
+    # clubb_c1_str = f"{clubb_c1:.04f}".replace('.', 'p')
+    param_name = "effgw_oro"
+    param_val = 0.37875
+    param_str = f"{param_val:.04f}".replace('.', 'p')
+    case = f"{today}.{compset}.{grid}.dtcl_{param_name}_{param_str}_n{ninst:04d}"
+    # case = f"{today}.{compset}.{grid}.dtcl_zmconv_c0_{zmconv_str}_n{ninst:04d}"
+    # case = f"{today}.{compset}.{grid}.dtcl_pertlim_{plim}_n{ninst:04d}"
+    print(f"{'#' * 40}\nCREATING CASE:\n{case}\n{'#' * 40}")
 
     case_dir = Path(os.environ["HOME"], "e3sm_scripts", case)
     case_dir = Path(os.getcwd(), case)
@@ -82,7 +92,7 @@ def main(build_case=False, run_case=False):
         str(Path(cime_scripts_dir, "create_newcase")),
         f"--compset {compset}",
         f"--res {grid}",
-        f"--walltime 00:20:00",
+        f"--walltime 02:30:00",
         f"--case {case}",
         f"--machine {mach}",
         f"--ninst {ninst}",
@@ -94,22 +104,47 @@ def main(build_case=False, run_case=False):
     os.system(" ".join(create_script))
     os.chdir(case_dir)
 
+    data_root = Path("/lcrc/group/e3sm/data/inputdata")
+    csmdata_atm = Path(data_root, "atm/cam/inic/homme/ne4_v2_init")
+    csmdata_lnd = Path(data_root, "lnd/clm2/initdata/ne4_oQU240_v2_init")
+
+
     # Generate user namelists to modify parameters for each ensemble member
     for iinst in range(1, ninst + 1):
         with open(
             "user_nl_{}_{:04d}".format(model_component, iinst), "w"
-        ) as nl_atm_file:
+        ) as nl_atm_file, open(
+            "user_nl_{}_{:04d}".format("elm", iinst), "w"
+        ) as nl_lnd_file:
+
+            fatm_in = Path(
+                csmdata_atm,
+                INIT_COND_FILE_TEMPLATE.format("eam", "i", 1),
+            )
+            flnd_in = Path(
+                csmdata_lnd,
+                INIT_COND_FILE_TEMPLATE.format("elm", "r", 1),
+            )
+
+            nl_atm_file.write("ncdata  = '{}' \n".format(fatm_in))
+            nl_lnd_file.write("finidat = '{}' \n".format(flnd_in))
+
             nl_atm_file.write("new_random = .true.\n")
-            nl_atm_file.write("pertlim = 1.0e-14\n")
+            nl_atm_file.write(f"pertlim = {plim}\n")
             nl_atm_file.write("seed_custom = {}\n".format(iinst))
-            nl_atm_file.write("seed_clock = .true.\n")
-            nl_atm_file.write(f"nhtfrq = {nhtfrq}\n")
-            nl_atm_file.write("avgflag_pertape = 'I'\n")
-            nl_atm_file.write("mfilt = 400\n")
+            nl_atm_file.write("seed_clock = .false.\n")
+
+            if nhtfrq is not None:
+                nl_atm_file.write(f"nhtfrq = {nhtfrq}\n")
+                nl_atm_file.write("avgflag_pertape = 'I'\n")
+                nl_atm_file.write("mfilt = 400\n")
+
             nl_atm_file.write(f"fincl1 = {', '.join(output_vars)}\n")
             nl_atm_file.write("empty_htapes = .true.\n")
-            nl_atm_file.write(f"zmconv_c0_ocn = {zmconv_c0}\n")
-            nl_atm_file.write(f"zmconv_c0_lnd = {zmconv_c0}")
+            nl_atm_file.write(f"{param_name} = {param_val}\n")
+            # nl_atm_file.write(f"clubb_c1 = {clubb_c1}\n")
+            # nl_atm_file.write(f"zmconv_c0_ocn = {zmconv_c0}\n")
+            # nl_atm_file.write(f"zmconv_c0_lnd = {zmconv_c0}")
 
     print(f"{'*' * 20} PREVIEW {'*' * 20}")
     os.system("./preview_run")
