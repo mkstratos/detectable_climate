@@ -6,6 +6,7 @@ from functools import partial
 import multiprocessing as mp
 import argparse
 import shutil
+import os
 
 NCPU = mp.cpu_count()
 
@@ -42,56 +43,32 @@ def print_cmd(cmd):
     print(" ".join([str(_cmi) for _cmi in cmd]))
 
 
-def nco_aavg(in_file, overwrite=False, debug_only=True):
-    """Perform area average on a netCDF file using NCO."""
-    _logfilename = "aavg.log"
-
-    aavg_outfile = Path(
-        *in_file.parts[:-1],
-        f"{in_file.stem}_aavg{in_file.suffix}",
-    )
-
-    wgt_avg = [
-        "ncwa",
-        "-O",
-        "-a",
-        "ncol,lev",
-        "-w",
-        "area",
-        in_file,
-        "-o",
-        aavg_outfile,
-    ]
-
-    # print(f"\tSTART AVG: {in_file.name.split('.')[-2]}")
-    if (not overwrite and aavg_outfile.exists()) or "aavg" in in_file.name:
-        print(f"{aavg_outfile} exists")
-
-    elif not debug_only:
-        sp.check_call(
-            wgt_avg,
-            stdout=open(_logfilename, "a"),
-            stderr=open(_logfilename, "a"),
-        )
-
-    else:
-        print_cmd(wgt_avg)
-    # print(f"\t  END AVG: {in_file.name.split('.')[-2]}")
-
-
-def combine_files(ninst, file_dir):
+def combine_files(ninst, file_dir, file_s=None, file_e=None):
 
     for i in range(1, ninst + 1):
         _files = sorted(Path(file_dir).glob(f"*eam_{i:04d}*aavg.nc"))
+        _files = _files[file_s:file_e]
         # print(_files[0])
         out_file = _files[0].name.split(".")
-        out_file = ".".join([*_files[0].name.split(".")[:-2], "nc"])
+        out_file = ".".join([*_files[0].name.split(".")[:-2], "aavg", "nc"])
         out_dir = Path(file_dir, "combined")
         if not out_dir.exists():
             print(f"CREATING COMBO DIR: {out_dir}")
             out_dir.mkdir(parents=True)
 
         sp.call(["ncrcat", *_files, Path(out_dir, out_file)])
+
+
+def move_files(case_dir):
+    """Remove individual aavg files, move combined files to run dir."""
+    combo_dir = Path(case_dir, "combined")
+    if not combo_dir.exists():
+        raise FileNotFoundError("Combined directory not found")
+    indv_files = Path(case_dir).glob("*eam*aavg.nc")
+    for _file in indv_files:
+        os.remove(_file)
+    os.system(f"mv {combo_dir.resolve()}/*.nc {case_dir.resolve()}")
+
 
 
 def combine_ensembles(scratch, base_case_name, new_case_name, debug=False):
@@ -136,38 +113,13 @@ def main(cl_args):
     # case = "20221130.F2010.ne4_oQU240.dtcl_control_n0030"
     # case = "20221205.F2010.ne4_oQU240.dtcl_zmconv_c0_0p00201_n0030"
     # case = "20221206.F2010.ne4_oQU240.dtcl_zmconv_c0_0p0030_n0030"
-
     # case = "20221201.F2010.ne4_oQU240.dtcl_zmconv_c0_0p0022_n0030"
+
     case_dir = Path(scratch, case, "run")
-    case_files = sorted(case_dir.glob(f"{case}.eam_*.h0*.nc"))
-    case_files = [_file for _file in case_files if "aavg" not in _file.name]
+    print(f"COMBINE FILES IN {case_dir}")
 
-    if serial:
-        for _file in case_files:
-            nco_aavg(_file, overwrite=overwrite, debug_only=debug_only)
-        print(f"DONE: {_file}")
-        _check = sp.check_output(["ncdump", "-v", "T", _file])
-        print("\t" + " ".join(_check.decode().split("\n")[-4:-3]).strip())
-    else:
-        # pool_size = min(NCPU, len(case_files) // 2)
-        pool_size = 120
-        print(f"DO AREA AVG TO {len(case_files)} FILES WITH {pool_size} PROCESSES")
-        print(f"    {case_files[0].name}")
-        with mp.Pool(pool_size) as pool:
-            _results = pool.map_async(
-                partial(
-                    nco_aavg,
-                    overwrite=overwrite,
-                    debug_only=debug_only,
-                ),
-                case_files,
-            )
-            results = _results.get()
-        print(f"{'#' * 20}COMPLETED{'#' * 20}")
-        # combine_files(ninst, case_dir)
-
-    if cl_args.base is not None:
-        combine_ensembles(scratch, cl_args.base, case, debug=debug_only)
+    combine_files(120, case_dir, file_s=None, file_e=None)
+    move_files(case_dir)
 
 
 if __name__ == "__main__":
