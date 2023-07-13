@@ -1,13 +1,12 @@
 #!/bin/bash
 
 #SBATCH --job-name=bootstrap
-#SBATCH --account=condo
-#SBATCH --partition=acme-small
+#SBATCH --account=e3sm
+#SBATCH --partition=compute
 #SBATCH --nodes=1
-#SBATCH --time=01:00:00
+#SBATCH --time=00:30:00
 
 # Setup My Environment
 source /soft/anaconda3/2020.11/etc/profile.d/conda.sh
 conda activate detcli
-/usr/bin/time -f "TIME: %es\n MEM: %M KB\n CPU: %P" \
-    python3 boostrap_ks_test.py --base ctl --test 2p5pct --iter 500
+python3 bootstrap_ks_test.py --base ${CASEA} --test ${CASEB} --runlen ${RUNLEN} --iter 500 --nodes 1 --rolling 12
