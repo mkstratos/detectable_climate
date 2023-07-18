@@ -25,6 +25,10 @@
         "pl_1e-14": "20230322.F2010.ne4_oQU240.dtcl_pertlim_1e-14_n0120",
         "effgw_oro-0p5pct": "20230615.F2010.ne4_oQU240.dtcl_effwg_oro_0p376875_n0120",
         "effgw_oro-1pct": "20230713.F2010.ne4_oQU240.dtcl_effgw_oro_0p3788_n0120",
-        "effgw_oro-10pct": "20230713.F2010.ne4_oQU240.dtcl_effgw_oro_0p412500_n0120"
+        "effgw_oro-10pct": "20230713.F2010.ne4_oQU240.dtcl_effgw_oro_0p412500_n0120",
+        "effgw_oro-50pct": "20230714.F2010.ne4_oQU240.dtcl_effgw_oro_0p562500_n0120",
+        "effgw_oro-30pct": "20230714.F2010.ne4_oQU240.dtcl_effgw_oro_0p487500_n0120",
+        "effgw_oro-40pct": "20230717.F2010.ne4_oQU240.dtcl_effgw_oro_0p525000_n0120",
+        "effgw_oro-20pct": "20230717.F2010.ne4_oQU240.dtcl_effgw_oro_0p450000_n0120"
     }
 }
