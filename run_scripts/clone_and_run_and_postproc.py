@@ -12,25 +12,33 @@ import argparse
 PARAM_DEFAULTS = {
     "effgw_oro": 0.375,
     "clubb_c1": 2.4,
-    "zmconv_c0_lnd": 0.0020,
-    "zmconv_c0_ocn": 0.0020,
+    "zmconv_c0": 0.0020,
 }
 
 
 def cl_args():
-    """Parse command line args to set parameters.
-    """
+    """Parse command line args to set parameters."""
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
-    parser.add_argument("--base", default="ctl", help="Short name of the base case.")
-    parser.add_argument("--param_name", default="effgw_oro")
-    parser.add_argument("--pct_change", default=1.0, type=float)
+    parser.add_argument(
+        "--param_name",
+        default="effgw_oro",
+        help=(
+            f"Parameter to modify in user_nl_eam_*, currently "
+            f"available are: {', '.join(PARAM_DEFAULTS.keys())}"
+        ),
+    )
+    parser.add_argument(
+        "--pct_change",
+        default=1.0,
+        type=float,
+        help="Percentage by which to increase the parameter from its default",
+    )
     return parser.parse_args()
 
 
-
-def main(cl_args):
+def main(args):
     """Setup runs."""
     mach = "chrys"
     model_branch = "maint-2.0"
@@ -41,9 +49,9 @@ def main(cl_args):
     base_case = "20230321.F2010.ne4_oQU240.dtcl_pertlim_1e-10_n0120"
 
     run_len = "1year"
-    param_name = cl_args.param_name
+    param_name = args.param_name
     param_default = PARAM_DEFAULTS[param_name]
-    pct_change = cl_args.pct_change
+    pct_change = args.pct_change
 
     param_val = param_default * (1 + pct_change / 100)
     param_str = f"{param_val:.06f}".replace(".", "p")
@@ -80,7 +88,11 @@ def main(cl_args):
     nl_files = Path(new_case).glob("user_nl_eam_*")
     for _nl_file in nl_files:
         with open(_nl_file, "a", encoding="utf-8") as _nlh:
-            _nlh.write(f"{param_name} = {param_val:.08f}\n")
+            if param_name in ["zmconv_c0"]:
+                for _param in [f"{param_name}_lnd", f"{param_name}_ocn"]:
+                    _nlh.write(f"{_param} = {param_val:.08f}\n")
+            else:
+                _nlh.write(f"{param_name} = {param_val:.08f}\n")
 
     print(f"SUBMITTING CASE FROM: {Path(new_case).resolve()}")
     submit_result = sp.check_output(
@@ -116,4 +128,4 @@ def main(cl_args):
 
 
 if __name__ == "__main__":
-    main()
+    main(cl_args())
