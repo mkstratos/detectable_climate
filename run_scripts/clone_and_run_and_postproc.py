@@ -7,9 +7,30 @@ from pathlib import Path
 import os
 import datetime as dt
 import json
+import argparse
+
+PARAM_DEFAULTS = {
+    "effgw_oro": 0.375,
+    "clubb_c1": 2.4,
+    "zmconv_c0_lnd": 0.0020,
+    "zmconv_c0_ocn": 0.0020,
+}
 
 
-def main():
+def cl_args():
+    """Parse command line args to set parameters.
+    """
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
+    parser.add_argument("--base", default="ctl", help="Short name of the base case.")
+    parser.add_argument("--param_name", default="effgw_oro")
+    parser.add_argument("--pct_change", default=1.0, type=float)
+    return parser.parse_args()
+
+
+
+def main(cl_args):
     """Setup runs."""
     mach = "chrys"
     model_branch = "maint-2.0"
@@ -20,9 +41,10 @@ def main():
     base_case = "20230321.F2010.ne4_oQU240.dtcl_pertlim_1e-10_n0120"
 
     run_len = "1year"
-    param_name = "effgw_oro"
-    param_default = 0.375
-    pct_change = 10
+    param_name = cl_args.param_name
+    param_default = PARAM_DEFAULTS[param_name]
+    pct_change = cl_args.pct_change
+
     param_val = param_default * (1 + pct_change / 100)
     param_str = f"{param_val:.06f}".replace(".", "p")
     short_name = f"{param_name}-{pct_change}pct"
@@ -67,7 +89,7 @@ def main():
         shell=True,
         cwd=Path(new_case).resolve(),
     )
-    print(submit_result)
+    print(submit_result.decode())
 
     job_id = int(
         [_line for _line in submit_result.decode().split("\n") if "job id" in _line][
