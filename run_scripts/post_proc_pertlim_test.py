@@ -99,6 +99,21 @@ def combine_ensembles(scratch, base_case_name, new_case_name, debug=False):
             shutil.copy2(new_file, Path(scratch, base_case_name, "run", _newname))
 
 
+def remove_files(case_name, case_dir):
+    """Remove un-needed mpassi, mpaso, elm, cpl, restart files.
+    """
+    globs_to_remove = [
+        f"{case_name}*.mpassi*.nc",
+        f"{case_name}*.mpasso*.nc",
+        f"{case_name}*.elm*.nc",
+        f"{case_name}*.mosart*.nc",
+        f"{case_name}*r.*.nc"
+    ]
+    for _glob in globs_to_remove:
+        print(f"REMOVING {len(sorted(case_dir.glob(_glob)))} files matching {_glob}")
+        os.system(f"rm -f {case_dir}/{_glob}")
+
+
 def main(cl_args):
     """Post process an ensemble run."""
     debug_only = cl_args.debug
@@ -118,8 +133,9 @@ def main(cl_args):
     case_dir = Path(scratch, case, "run")
     print(f"COMBINE FILES IN {case_dir}")
 
-    combine_files(120, case_dir, file_s=None, file_e=None)
-    move_files(case_dir)
+    # combine_files(120, case_dir, file_s=None, file_e=None)
+    # move_files(case_dir)
+    remove_files(case, case_dir)
 
 
 if __name__ == "__main__":
