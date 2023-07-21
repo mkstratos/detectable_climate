@@ -55,7 +55,8 @@ def main(args):
 
     param_val = param_default * (1 + pct_change / 100)
     param_str = f"{param_val:.06f}".replace(".", "p")
-    short_name = f"{param_name}-{pct_change}pct"
+    pct_str = f"{pct_change:.1f}".replace(".", "p")
+    short_name = f"{param_name}-{pct_str}pct"
 
     # Here's the example call to create a clone
     # ~/baseline/maint-2.0/E3SM/cime/scripts/create_clone \
