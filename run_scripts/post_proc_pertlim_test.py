@@ -70,7 +70,6 @@ def move_files(case_dir):
     os.system(f"mv {combo_dir.resolve()}/*.nc {case_dir.resolve()}")
 
 
-
 def combine_ensembles(scratch, base_case_name, new_case_name, debug=False):
     """Move cloned case files into another directory to combine outputs."""
     new_files = sorted(Path(scratch, new_case_name, "run").glob(f"*aavg.nc"))
@@ -94,20 +93,21 @@ def combine_ensembles(scratch, base_case_name, new_case_name, debug=False):
 
         if debug:
             print(f"{new_file.exists()}")
-            print(f"copy {new_file} to\n     {Path(scratch, base_case_name, 'run', _newname)}")
+            print(
+                f"copy {new_file} to\n     {Path(scratch, base_case_name, 'run', _newname)}"
+            )
         else:
             shutil.copy2(new_file, Path(scratch, base_case_name, "run", _newname))
 
 
 def remove_files(case_name, case_dir):
-    """Remove un-needed mpassi, mpaso, elm, cpl, restart files.
-    """
+    """Remove un-needed mpassi, mpaso, elm, cpl, restart files."""
     globs_to_remove = [
         f"{case_name}*.mpassi*.nc",
         f"{case_name}*.mpasso*.nc",
         f"{case_name}*.elm*.nc",
         f"{case_name}*.mosart*.nc",
-        f"{case_name}*r.*.nc"
+        f"{case_name}*.r*.nc",
     ]
     for _glob in globs_to_remove:
         print(f"REMOVING {len(sorted(case_dir.glob(_glob)))} files matching {_glob}")
@@ -133,8 +133,8 @@ def main(cl_args):
     case_dir = Path(scratch, case, "run")
     print(f"COMBINE FILES IN {case_dir}")
 
-    # combine_files(120, case_dir, file_s=None, file_e=None)
-    # move_files(case_dir)
+    combine_files(120, case_dir, file_s=None, file_e=None)
+    move_files(case_dir)
     remove_files(case, case_dir)
 
 
