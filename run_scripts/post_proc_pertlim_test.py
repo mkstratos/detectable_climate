@@ -35,6 +35,12 @@ def parse_args(args=None):
         default=None,
         help="Combine --case with --base",
     )
+    parser.add_argument(
+        "--mach",
+        default="chrys",
+        help="Machine on which the run took place"
+    )
+
     return parser.parse_args()
 
 
@@ -123,7 +129,7 @@ def main(cl_args):
 
     serial = False
 
-    scratch = Path("/lcrc/group/e3sm/ac.mkelleher/scratch/chrys/")
+    scratch = Path("/lcrc/group/e3sm/ac.mkelleher/scratch/", cl_args.mach)
     # case = "20221128.F2010.ne4_oQU240.dtcl_control"
     # case = "20221130.F2010.ne4_oQU240.dtcl_control_n0030"
     # case = "20221205.F2010.ne4_oQU240.dtcl_zmconv_c0_0p00201_n0030"
