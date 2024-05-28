@@ -277,7 +277,7 @@ def check_ensemble_vars(ens_data, common_vars, case):
     return const_vars
 
 
-def ks_bootstrap_serial(ens_data, case_abbr, data_vars):
+def ks_bootstrap_serial(ens_data, case_abbr, data_vars, permute):
     """Perform multiple K-S tests on ensemble data.
 
     Parameters
@@ -288,6 +288,8 @@ def ks_bootstrap_serial(ens_data, case_abbr, data_vars):
         Length two list or tuple of cases in `ens_data` to compare
     data_vars : list
         List of data variables on which to perform the test
+    permute : logical
+        Use permutation to create control ensemble
 
     Returns
     -------
@@ -321,7 +323,7 @@ def ks_bootstrap_serial(ens_data, case_abbr, data_vars):
     return np.array(ks_stat_i), np.array(ks_pval_i)
 
 
-def ks_bootstrap(ens_data, case_abbr, dask_client, n_iter=5, test_size=30):
+def ks_bootstrap(ens_data, case_abbr, dask_client, n_iter=5, test_size=30, permute=False):
     """Perform multiple K-S tests on selected variables in two ensembles.
 
     Parameters
@@ -336,6 +338,8 @@ def ks_bootstrap(ens_data, case_abbr, dask_client, n_iter=5, test_size=30):
         Number of boostrap tests to perform, by default 5
     test_size : int, optional
         Number of ensemble members for each K-S test, by default 30
+    permute : logical
+        Use permutation to create control ensemble
 
     Returns
     -------
@@ -349,7 +353,7 @@ def ks_bootstrap(ens_data, case_abbr, dask_client, n_iter=5, test_size=30):
     futures = []
     with open("run_scripts/new_vars.json", "r", encoding="utf-8") as _vf_in:
         data_vars = sorted(json.load(_vf_in)["default"])
-
+    vars_out = []
     # random_index = [
     #     [
     #         random.sample(
@@ -377,27 +381,31 @@ def ks_bootstrap(ens_data, case_abbr, dask_client, n_iter=5, test_size=30):
     #     ]
     #     for _abbr in case_abbr
     # ]
-    # Get random sample, outputs a dict: {case_a: [i1, i2, ...], case_b: [i1, i2, ...]}
-    random_index, _ = randomise_sample(ens_data, case_abbr, test_size, niter=n_iter)
-    # Convert the dict to a list of two lists
-    # random_index = [random_index[_case] for _case in random_index]
-    print(f"RANDOM INDEX SIZE: {np.array(random_index).shape}")
+    if not permute:
+        # Get random sample, outputs a dict: {case_a: [i1, i2, ...], case_b: [i1, i2, ...]}
+        random_index, _ = randomise_sample(ens_data, case_abbr, test_size, niter=n_iter)
+        print(f"RANDOM INDEX SIZE: {np.array(random_index).shape}")
+
     for rse in range(n_iter):
         var_futures = []
         data_0 = ens_data[case_abbr[0]].isel(**{"ens": random_index[0][rse]})
         data_1 = ens_data[case_abbr[1]].isel(**{"ens": random_index[1][rse]})
 
         for test_var in data_vars:
-            var_futures.append(
-                dask_client.submit(ks_all_times, data_0[test_var], data_1[test_var])
-            )
+            if test_var in data_0.data_vars and test_var in data_1.data_vars:
+                var_futures.append(
+                    dask_client.submit(ks_all_times, data_0[test_var], data_1[test_var])
+                )
+                # Keep a list of all the variables tested, but only one copy
+                if test_var not in vars_out:
+                    vars_out.append(test_var)
         futures.append(var_futures)
 
     results = da.array(dask.compute(*dask_client.gather(futures)))
     ks_stat = results[..., 0, :]
     ks_pval = results[..., 1, :]
 
-    return ks_stat, ks_pval, np.array(random_index)
+    return ks_stat, ks_pval, np.array(random_index), vars_out
 
 
 def output_data(ks_stat, ks_pval, rnd_idx, times, data_vars):
@@ -533,7 +541,7 @@ def rolling_mean_data(ens_data, cases, period_len=12, time_var="time"):
     return {_case: xr.Dataset(rolling_means[_case]) for _case in cases}
 
 
-def main(case_a="ctl", case_b="5pct", run_len="1year", n_iter=5, nnodes=1, rolling=0):
+def main(case_a="ctl", case_b="5pct", run_len="1year", n_iter=5, nnodes=1, rolling=0, permute=False):
     """Perform bootstrap K-S testing of two ensembles of E3SM
 
     Parameters
@@ -546,13 +554,15 @@ def main(case_a="ctl", case_b="5pct", run_len="1year", n_iter=5, nnodes=1, rolli
         Case run length (defauylt 1year)
     n_iter : int, optional
         Number of bootstrap iterations to perform, default 5
+    permute : logical, optional
+        Use permutation for control ensemble, default False
 
     """
     with open("case_db.json", "r", encoding="utf-8") as _cdb:
         cases = json.loads(_cdb.read())
 
-    with open("run_scripts/new_vars.json", "r", encoding="utf-8") as _vf_in:
-        test_vars = sorted(json.load(_vf_in)["default"])
+    # with open("run_scripts/new_vars.json", "r", encoding="utf-8") as _vf_in:
+    #     test_vars = sorted(json.load(_vf_in)["default"])
 
     scratch = Path("/lcrc/group/e3sm/ac.mkelleher/scratch/chrys/")
     case_dirs = {
@@ -573,16 +583,23 @@ def main(case_a="ctl", case_b="5pct", run_len="1year", n_iter=5, nnodes=1, rolli
     ) as client:
         print(client)
         print(f"PERFORM {n_iter} TESTS")
-        ks_stat, ks_pval, rnd_indx = ks_bootstrap(
-            ens_data, [case_a, case_b], client, n_iter=n_iter
+        ks_stat, ks_pval, rnd_indx, test_vars = ks_bootstrap(
+            ens_data, [case_a, case_b], client, n_iter=n_iter, permute=permute,
         )
         time.sleep(1)
         print("OUTPUT TO FILE")
         ds_out = output_data(
             ks_stat, ks_pval, rnd_indx, ens_data[case_a]["time"], test_vars
         )
+        if rolling == 0:
+            run_shape = run_len
+        else:
+            run_shape = f"{run_len}_{rolling}avg"
         ds_out.to_netcdf(
-            Path("bootstrap_data", f"bootstrap_output.{run_len}.{case_a}_{case_b}_n{n_iter}.nc")
+            Path(
+                "bootstrap_data",
+                f"bootstrap_output.{run_shape}.{case_a}_{case_b}_n{n_iter}.nc",
+            )
         )
 
 
@@ -606,6 +623,13 @@ def parse_args():
         help="Perform a rolling time mean with specified period length.",
         type=int,
     )
+    parser.add_argument(
+        "-p",
+        "--permute",
+        action="store_true",
+        default=False,
+        help="Use permutation method for control",
+    )
     return parser.parse_args()
 
 
@@ -619,4 +643,5 @@ if __name__ == "__main__":
         n_iter=int(cl_args.iter),
         nnodes=int(cl_args.nodes),
         rolling=int(cl_args.rolling),
+        permute=cl_args.permute,
     )
