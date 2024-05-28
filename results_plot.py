@@ -14,25 +14,13 @@ plt.style.use("ggplot")
 REJECT_THR = 0.05
 
 
-def fmt_case(case: str) -> str:
-    """
-    Turn an abbreviated case name into a prettier version.
-
-    Parameters
-    ----------
-    case : str
-        Case name (from case_db.json)
-
-    Returns
-    -------
-    case_str : str
-        Longer name of `case` for use in legends, etc.
-
-    """
+def fmt_case(case):
     if case == "ctl":
         _out = "Control"
     elif case == "ctl-2mo":
         _out = "Control [2 mo]"
+    elif case == "ctl-v3":
+        _out = "Control v3"
     elif case == "new-ctl":
         _out = "Control [new]"
     elif case == "ctl-next":
@@ -53,6 +41,7 @@ def fmt_case(case: str) -> str:
             num = float(
                 case.split("-")[-1]
                 .replace("pct", "")
+                .replace("ct", "")
                 .replace("p", ".")
                 .replace("-2mo", "")
             )
@@ -61,6 +50,7 @@ def fmt_case(case: str) -> str:
             num = float(
                 case.split("-")[1]
                 .replace("pct", "")
+                .replace("ct", "")
                 .replace("p", ".")
                 .replace("-2mo", "")
             )
