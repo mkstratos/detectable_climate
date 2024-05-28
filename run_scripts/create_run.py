@@ -8,7 +8,9 @@ import json
 
 COMPONENT_NAMES = ["ATM", "CPL", "OCN", "WAV", "GLC", "ICE", "ROF", "LND", "ESP", "IAC"]
 "ATM" "CPL" "OCN" "WAV" "GLC" "ICE" "ROF" "LND" "ESP" "IAC"
-INIT_COND_FILE_TEMPLATE = "20210915.v2.ne4_oQU240.F2010.{}.{}.0003-{:02d}-01-00000.nc"
+# INIT_COND_FILE_TEMPLATE = "20210915.v2.ne4_oQU240.F2010.{}.{}.0003-{:02d}-01-00000.nc"
+# 20231002.F2010.ne4_oQU240_init.elm.h0.0002-07.nc
+INIT_COND_FILE_TEMPLATE = "20231002.F2010.ne4_oQU240_init.{}.{}.0003-{:02d}-01-00000.nc"
 
 
 def set_tasks(ninst, case_dir):
@@ -67,7 +69,7 @@ def main(build_case=False, run_case=False):
     compiler = "intel"
     today = dt.datetime.now().strftime("%Y%m%d")
     # branch = "maint-2.0"
-    branch = "next"
+    branch = "master"
     plim = 1e-10
 
     # zmconv_c0 = 0.0022
@@ -95,7 +97,7 @@ def main(build_case=False, run_case=False):
         str(Path(cime_scripts_dir, "create_newcase")),
         f"--compset {compset}",
         f"--res {grid}",
-        f"--walltime 02:30:00",
+        f"--walltime 03:00:00",
         f"--case {case}",
         f"--machine {mach}",
         f"--ninst {ninst}",
@@ -107,9 +109,12 @@ def main(build_case=False, run_case=False):
     os.system(" ".join(create_script))
     os.chdir(case_dir)
 
-    data_root = Path("/lcrc/group/e3sm/data/inputdata")
-    csmdata_atm = Path(data_root, "atm/cam/inic/homme/ne4_v2_init")
-    csmdata_lnd = Path(data_root, "lnd/clm2/initdata/ne4_oQU240_v2_init")
+    # data_root = Path("/lcrc/group/e3sm/data/inputdata")
+    # csmdata_atm = Path(data_root, "atm/cam/inic/homme/ne4_v2_init")
+    # csmdata_lnd = Path(data_root, "lnd/clm2/initdata/ne4_oQU240_v2_init")
+    data_root = Path("/lcrc/group/e3sm/ac.mkelleher/scratch/chrys/20231002.F2010.ne4_oQU240_init")
+    csmdata_atm = Path(data_root, "run")
+    csmdata_lnd = Path(data_root, "run")
 
     # Generate user namelists to modify parameters for each ensemble member
     for iinst in range(1, ninst + 1):
@@ -119,17 +124,17 @@ def main(build_case=False, run_case=False):
             "user_nl_{}_{:04d}".format("elm", iinst), "w"
         ) as nl_lnd_file:
 
-            # fatm_in = Path(
-            #     csmdata_atm,
-            #     INIT_COND_FILE_TEMPLATE.format("eam", "i", 1),
-            # )
-            # flnd_in = Path(
-            #     csmdata_lnd,
-            #     INIT_COND_FILE_TEMPLATE.format("elm", "r", 1),
-            # )
+            fatm_in = Path(
+                csmdata_atm,
+                INIT_COND_FILE_TEMPLATE.format("eam", "i", 1),
+            )
+            flnd_in = Path(
+                csmdata_lnd,
+                INIT_COND_FILE_TEMPLATE.format("elm", "r", 1),
+            )
 
-            # nl_atm_file.write("ncdata  = '{}' \n".format(fatm_in))
-            # nl_lnd_file.write("finidat = '{}' \n".format(flnd_in))
+            nl_atm_file.write("ncdata  = '{}' \n".format(fatm_in))
+            nl_lnd_file.write("finidat = '{}' \n".format(flnd_in))
 
             nl_atm_file.write("new_random = .true.\n")
             nl_atm_file.write(f"pertlim = {plim}\n")
@@ -141,8 +146,8 @@ def main(build_case=False, run_case=False):
                 nl_atm_file.write("avgflag_pertape = 'I'\n")
                 nl_atm_file.write("mfilt = 400\n")
 
-            nl_atm_file.write(f"fincl1 = {', '.join(output_vars)}\n")
-            nl_atm_file.write("empty_htapes = .true.\n")
+            # nl_atm_file.write(f"fincl1 = {', '.join(output_vars)}\n")
+            # nl_atm_file.write("empty_htapes = .true.\n")
             # if param_name != "ctl":
             if "ctl" not in param_name:
                 nl_atm_file.write(f"{param_name} = {param_val}\n")
@@ -163,7 +168,7 @@ def main(build_case=False, run_case=False):
 
     os.system(f"./xmlchange STOP_N={sim_length}")
     os.system(f"./xmlchange STOP_OPTION={stop_option}")
-    os.system(f"./xmlchange REST_N=1")
+    os.system(f"./xmlchange REST_N=7")
     os.system(f"./xmlchange REST_OPTION=nmonths")
     os.system(f"./xmlquery GMAKE_J")
     os.system(f"./xmlchange GMAKE_J=64")
