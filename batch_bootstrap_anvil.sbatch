@@ -10,13 +10,10 @@
 source /soft/anaconda3/2020.11/etc/profile.d/conda.sh
 conda activate detcli
 
-base=pl_1e-10
-test=gworo-1yr-10pct
-
-/usr/bin/time -f "TIME: %es\n MEM: %M KB\n CPU: %P" \
-    python3 bootstrap_ks_test.py \
-    --base $base \
-    --test $test \
+python3 bootstrap_ks_test.py \
+    --base ${CASEA} \
+    --test ${CASEB} \
+    --runlen ${RUNLEN} \
     --iter 500 \
     --nodes 1 \
     --rolling 12
