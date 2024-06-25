@@ -61,7 +61,7 @@ def ks_all_times_nv(data_1, data_2):
         results (statstic, p-value)
 
     """
-    return da.array(
+    return da.array( # type: ignore
         [
             sts.ks_2samp(data_1[:, _tix], data_2[:, _tix], method="asymp")
             for _tix in range(data_1.shape[1])
@@ -89,7 +89,7 @@ def ks_all_times(data_1, data_2):
     # ks_stat, ks_pval = ks_test(data_1.T, data_2.T, method="asymp")
     ks_test = np.vectorize(sts.mstats.ks_2samp, signature="(n),(n)->(),()")
     ks_stat, ks_pval = ks_test(data_1.T, data_2.T)
-    return da.array(ks_stat), da.array(ks_pval)
+    return da.array(ks_stat), da.array(ks_pval)  # type: ignore
     # return da.array(ks_test(data_1, data_2, method="asymp"))
     # return da.array(
     #     [
@@ -401,7 +401,7 @@ def ks_bootstrap(ens_data, case_abbr, dask_client, n_iter=5, test_size=30, permu
                     vars_out.append(test_var)
         futures.append(var_futures)
 
-    results = da.array(dask.compute(*dask_client.gather(futures)))
+    results = da.array(dask.compute(*dask_client.gather(futures)))  # type: ignore
     ks_stat = results[..., 0, :]
     ks_pval = results[..., 1, :]
 
@@ -433,8 +433,8 @@ def output_data(ks_stat, ks_pval, rnd_idx, times, data_vars):
         dims=out_dims,
         attrs={
             "units": "",
-            "desc": "2-sample K-S test P-value",
-            "long_name": "kolmogorov_smirnov_test_p_value",
+            "desc": "2-sample K-S test statistic",
+            "long_name": "kolmogorov_smirnov_test_statistic",
             "short_name": "ks_pval",
         },
     )
@@ -444,8 +444,8 @@ def output_data(ks_stat, ks_pval, rnd_idx, times, data_vars):
         dims=out_dims,
         attrs={
             "units": "",
-            "desc": "2-sample K-S test statistic",
-            "long_name": "kolmogorov_smirnov_test_statistic",
+            "desc": "2-sample K-S test P-value",
+            "long_name": "kolmogorov_smirnov_test_p_value",
             "short_name": "ks_stat",
         },
     )
