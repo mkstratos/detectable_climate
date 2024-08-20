@@ -17,6 +17,8 @@ REJECT_THR = 0.05
 def fmt_case(case):
     if case == "ctl":
         _out = "Control"
+    elif case == "ctl_ts40":
+        _out = "Control: n40"
     elif case == "ctl-2mo":
         _out = "Control [2 mo]"
     elif case == "ctl-v3":
@@ -33,7 +35,7 @@ def fmt_case(case):
         _out = f"new {num:.1f}%"
     elif "c1" in case:
         num = float(
-            case.split("-")[1].replace("pct", "").replace("p", ".").replace("-2mo", "")
+            case.split("-")[1].replace("pct", "").replace("p", ".").replace("-2mo", "").replace("_ts40", "")
         )
         _out = f"clubb_c1 {num:.1f}%"
     elif "gworo" in case or "effgw_oro" in case:
@@ -44,6 +46,7 @@ def fmt_case(case):
                 .replace("ct", "")
                 .replace("p", ".")
                 .replace("-2mo", "")
+                .replace("_ts40", "")
             )
             _out = f"GW orog {num:.1f}%"
         else:
@@ -53,6 +56,7 @@ def fmt_case(case):
                 .replace("ct", "")
                 .replace("p", ".")
                 .replace("-2mo", "")
+                .replace("_ts40", "")
             )
             _out = f"GW orog {num:.1f}%"
     elif "pl" in case:
@@ -63,6 +67,8 @@ def fmt_case(case):
     else:
         num = float(case.replace("pct", "").replace("p", ".").replace("-2mo", ""))
         _out = f"{num:.1f}%"
+    if "ts" in case:
+        _out += "_n40"
     return _out
 
 

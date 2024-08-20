@@ -541,7 +541,7 @@ def rolling_mean_data(ens_data, cases, period_len=12, time_var="time"):
     return {_case: xr.Dataset(rolling_means[_case]) for _case in cases}
 
 
-def main(case_a="ctl", case_b="5pct", run_len="1year", n_iter=5, nnodes=1, rolling=0, permute=False):
+def main(case_a="ctl", case_b="5pct", run_len="1year", n_iter=5, nnodes=1, rolling=0, permute=False, test_size=30):
     """Perform bootstrap K-S testing of two ensembles of E3SM
 
     Parameters
@@ -556,6 +556,8 @@ def main(case_a="ctl", case_b="5pct", run_len="1year", n_iter=5, nnodes=1, rolli
         Number of bootstrap iterations to perform, default 5
     permute : logical, optional
         Use permutation for control ensemble, default False
+    test_size: int
+        Number of ensemble members per test, default 30
 
     """
     with open("case_db.json", "r", encoding="utf-8") as _cdb:
@@ -584,7 +586,7 @@ def main(case_a="ctl", case_b="5pct", run_len="1year", n_iter=5, nnodes=1, rolli
         print(client)
         print(f"PERFORM {n_iter} TESTS")
         ks_stat, ks_pval, rnd_indx, test_vars = ks_bootstrap(
-            ens_data, [case_a, case_b], client, n_iter=n_iter, permute=permute,
+            ens_data, [case_a, case_b], client, n_iter=n_iter, permute=permute, test_size=test_size
         )
         time.sleep(1)
         print("OUTPUT TO FILE")
@@ -595,6 +597,8 @@ def main(case_a="ctl", case_b="5pct", run_len="1year", n_iter=5, nnodes=1, rolli
             run_shape = run_len
         else:
             run_shape = f"{run_len}_{rolling}avg"
+        if test_size != 30:
+            run_shape += f"_ts{test_size}"
         ds_out.to_netcdf(
             Path(
                 "bootstrap_data",
@@ -644,4 +648,5 @@ if __name__ == "__main__":
         nnodes=int(cl_args.nodes),
         rolling=int(cl_args.rolling),
         permute=cl_args.permute,
+        test_size=30,
     )
