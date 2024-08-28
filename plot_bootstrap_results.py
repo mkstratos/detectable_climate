@@ -3,18 +3,30 @@
 """Plot results from K-S test bootstrapping, perform FDR Corrections.
 """
 
-import matplotlib.pyplot as plt
-import xarray as xr
+import argparse
 from pathlib import Path
+
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
-from statsmodels.stats import multitest as smm
+import xarray as xr
 from matplotlib.ticker import ScalarFormatter
+from statsmodels.stats import multitest as smm
 
 plt.style.use("default")
 
-REJ_THR = {0.01: 5, 0.05: 11}
+REJ_THR = {0.01: 6, 0.05: 12}
+
+
+def parse_args():
+    """Parse command line arguments."""
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
+    parser.add_argument("--alpha", default=0.05, type=float, help="Significance level")
+    parser.add_argument("--ext", default="png", type=str, help="Image file extension")
+    return parser.parse_args()
 
 
 def reject_vars(pvals: np.ndarray, alpha: float = 0.05):
@@ -39,7 +51,7 @@ class CaseData:
     methods = {
         "uncor": "Un-corrected",
         "fdr_bh": "Corr [B-H]",
-        "fdr_by": "Corr [B-Y]",
+        # "fdr_by": "Corr [B-Y]",
     }
 
     def __init__(
@@ -53,7 +65,7 @@ class CaseData:
     ):
         _corr_methods = [
             "fdr_bh",
-            "fdr_by",
+            # "fdr_by",
             # "bonferroni",
             # "fdr_tsbh",
             # "fdr_tsbky",
@@ -217,12 +229,13 @@ def plot_rej_vars(
         _description_
 
     """
-    fig, axis = plt.subplots(
-        1, 1, figsize=(2 * fig_spec["width"], fig_spec["width"]), dpi=fig_spec["dpi"]
+    fig, axes = plt.subplots(
+        1, 2, figsize=(2 * fig_spec["width"], fig_spec["width"]), dpi=fig_spec["dpi"]
     )
 
     for ixp, _param in enumerate(params):
         _nvars = reject_qtiles(case_data[_param], idx, qtile)
+        axis = axes[ixp]
         for ixm, _method in enumerate(case_data[_param][0].methods):
             _method_hum = case_data[_param][0].methods[_method]
             axis.plot(
@@ -234,31 +247,31 @@ def plot_rej_vars(
                 label=f"{params[_param]}: {_method_hum} {qtile:.0f}%",
             )
 
-    axis.legend(fontsize=style["legend_fontsize"])
+        axis.legend(fontsize=style["legend_fontsize"])
 
-    # Put a horizontal line for the test failure threshold
-    axis.axhline(
-        1,
-        color="k",
-        ls="--",
-        lw=style["linewidth"],
-        label="Global test failure threshold [cor]",
-    )
-    axis.axhline(
-        REJ_THR[case_data[_param][0].alpha],
-        color="k",
-        ls="-",
-        lw=style["linewidth"],
-        label="Global test failure threshold [unc]",
-    )
+        # Put a horizontal line for the test failure threshold
+        axis.axhline(
+            1,
+            color="k",
+            ls="--",
+            lw=style["linewidth"],
+            label="Global test failure threshold [cor]",
+        )
+        axis.axhline(
+            REJ_THR[case_data[_param][0].alpha],
+            color="k",
+            ls="-",
+            lw=style["linewidth"],
+            label="Global test failure threshold [unc]",
+        )
 
-    axis.set_xlabel("Parameter Change [%]", fontsize=style["label_fontsize"])
-    axis.set_ylabel(
-        f"Number of variables\nrejected [p < {case_data[_param][0].alpha:.2f}]",
-        fontsize=style["label_fontsize"],
-    )
-    axis.legend(fontsize=style["legend_fontsize"])
-    style_axis(axis, style)
+        axis.set_xlabel("Parameter Change [%]", fontsize=style["label_fontsize"])
+        axis.set_ylabel(
+            f"Number of variables\nrejected [p < {case_data[_param][0].alpha:.2f}]",
+            fontsize=style["label_fontsize"],
+        )
+        axis.legend(fontsize=style["legend_fontsize"])
+        style_axis(axis, style)
 
     fig.tight_layout()
     fig.savefig(f"plt_nrej_vars_{idx}_q{qtile:.0f}.{fig_spec['ext']}")
@@ -293,7 +306,7 @@ def plot_tests_failed(
         _ntests = ntests(case_data[_param], idx)
         for ixm, _method in enumerate(case_data[_param][0].methods):
             _method_hum = case_data[_param][0].methods[_method]
-            axis[ixp].plot(
+            axis[ixp].semilogy(
                 _ntests["pct_change"],
                 _ntests[_method],
                 color=style["colors"][ixp],
@@ -301,7 +314,7 @@ def plot_tests_failed(
                 marker=style["markers"][ixm],
                 label=f"{params[_param]}: {_method_hum}",
             )
-
+        axis[ixp].set_ylim([10, 1500])
         axis[ixp].legend(fontsize=style["legend_fontsize"])
 
         # Put a horizontal line for alpha*niter% of bootstrap iterations
@@ -366,14 +379,15 @@ def ntests(case_data: list, idx: int = 0):
     return _data
 
 
-def main():
+def main(args):
 
     run_len = "1year"
     rolling = 12
     niter = 1000
-    alpha = 0.01
+    alpha = args.alpha
+    assert 0.0 < alpha < 1.0, f"ALPHA {alpha} not in [0, 1]"
 
-    pcts = {"effgw_oro": [1, 5, 10, 20, 30, 40, 50], "clubb_c1": [1, 3, 5, 10]}
+    pcts = {"effgw_oro": [1, 10, 20, 30, 40, 50], "clubb_c1": [1, 3, 5, 10]}
     params_hum = {"effgw_oro": "GW Orog", "clubb_c1": "CLUBB C1"}
 
     # Initialize list of case with control vs. control test
@@ -412,7 +426,7 @@ def main():
         "dpi": 300,
         "width": fig_width,
         "height": fig_width / 3.75,
-        "ext": "png",
+        "ext": args.ext,
     }
 
     _case = ("ctl", "ctl")
@@ -434,18 +448,21 @@ def main():
         "lstyle": ["-", "--", "-."],
         "markers": ["o", "x", "+", "h", ".", "*"],
     }
-    plot_rej_vars(
-        case_data,
-        2,
-        100 * (1 - alpha),
-        params=params_hum,
-        fig_spec=fig_spec,
-        style=style,
-    )
-    plot_tests_failed(case_data, 2, params=params_hum, fig_spec=fig_spec, style=style)
+    for _ti in [0, 1, 2]:
+        plot_rej_vars(
+            case_data,
+            _ti,
+            100 * (1 - alpha),
+            params=params_hum,
+            fig_spec=fig_spec,
+            style=style,
+        )
+        plot_tests_failed(
+            case_data, _ti, params=params_hum, fig_spec=fig_spec, style=style
+        )
 
     return case_data, params_hum, fig_spec
 
 
 if __name__ == "__main__":
-    case_data = main()
+    case_data = main(parse_args())
