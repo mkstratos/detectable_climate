@@ -26,6 +26,9 @@ def parse_args():
     )
     parser.add_argument("--alpha", default=0.05, type=float, help="Significance level")
     parser.add_argument("--ext", default="png", type=str, help="Image file extension")
+    parser.add_argument(
+        "--vert", type="store_true", default=False, help="Orient figures in vertical"
+    )
     return parser.parse_args()
 
 
@@ -134,7 +137,8 @@ class CaseData:
         else:
             _qtile = 50
 
-        fig, axes = plt.subplots(1, 2, figsize=(15, 4))
+        # fig, axes = plt.subplots(1, 2, figsize=(15, 4))
+        fig, axes = plt.subplots(2, 1, figsize=(4, 15))
         width = 0.333
         mult = 0
 
@@ -229,9 +233,14 @@ def plot_rej_vars(
         _description_
 
     """
-    fig, axes = plt.subplots(
-        1, 2, figsize=(2 * fig_spec["width"], fig_spec["width"]), dpi=fig_spec["dpi"]
-    )
+    if "vert" in fig_spec["orient"].lower():
+        fig, axes = plt.subplots(
+            2, 1, figsize=(fig_spec["width"], 2 * fig_spec["width"]), dpi=fig_spec["dpi"]
+        )
+    else:
+        fig, axes = plt.subplots(
+            1, 2, figsize=(2 * fig_spec["width"], fig_spec["width"]), dpi=fig_spec["dpi"]
+        )
 
     for ixp, _param in enumerate(params):
         _nvars = reject_qtiles(case_data[_param], idx, qtile)
@@ -265,11 +274,21 @@ def plot_rej_vars(
             label="Global test failure threshold [unc]",
         )
 
-        axis.set_xlabel("Parameter Change [%]", fontsize=style["label_fontsize"])
-        axis.set_ylabel(
-            f"Number of variables\nrejected [p < {case_data[_param][0].alpha:.2f}]",
-            fontsize=style["label_fontsize"],
-        )
+        if "vert" in fig_spec["orient"].lower():
+            x_check = (ixp == len(params) - 1)
+            y_check = True
+        else:
+            x_check = True
+            y_check = (ixp == 0)
+
+        if x_check:
+            axis.set_xlabel("Parameter Change [%]", fontsize=style["label_fontsize"])
+
+        if y_check:
+            axis.set_ylabel(
+                f"Number of variables\nrejected [p < {case_data[_param][0].alpha:.2f}]",
+                fontsize=style["label_fontsize"],
+            )
         axis.legend(fontsize=style["legend_fontsize"])
         style_axis(axis, style)
 
@@ -293,13 +312,24 @@ def plot_tests_failed(
         _description_
 
     """
-    fig, axis = plt.subplots(
-        1,
-        2,
-        figsize=(2 * fig_spec["width"], fig_spec["width"]),
-        dpi=fig_spec["dpi"],
-        sharey=True,
-    )
+    # Horizontal orientation
+    if "horiz" in fig_spec["orient"].lower():
+        fig, axis = plt.subplots(
+            1,
+            2,
+            figsize=(2 * fig_spec["width"], fig_spec["width"]),
+            dpi=fig_spec["dpi"],
+            sharey=True,
+        )
+    # Vertical orientation
+    else:
+        fig, axis = plt.subplots(
+            2,
+            1,
+            figsize=(fig_spec["width"], 2 * fig_spec["width"]),
+            dpi=fig_spec["dpi"],
+            sharey=True,
+        )
     axis = axis.flatten()
 
     for ixp, _param in enumerate(params):
@@ -327,8 +357,17 @@ def plot_tests_failed(
             label=f"{case_data[_param][0].alpha*100:.0f}% of tests ({_alphapct:.0f})",
         )
 
-        axis[ixp].set_xlabel("Parameter Change [%]", fontsize=style["label_fontsize"])
-        if ixp == 0:
+        if "vert" in fig_spec["orient"].lower():
+            x_check = (ixp == len(params) - 1)
+            y_check = True
+        else:
+            x_check = True
+            y_check = (ixp == 0)
+
+        if x_check:
+            axis[ixp].set_xlabel("Parameter Change [%]", fontsize=style["label_fontsize"])
+
+        if y_check:
             axis[ixp].set_ylabel(
                 (
                     f"Tests with global\n"
@@ -420,7 +459,6 @@ def main(args):
             case_data[_param].append(
                 CaseData(_file, *_case, REJ_THR[alpha], alpha, pct_change=_pct)
             )
-
     fig_width = 12.5 / 2.54
     fig_spec = {
         "dpi": 300,
@@ -428,6 +466,10 @@ def main(args):
         "height": fig_width / 3.75,
         "ext": args.ext,
     }
+    if args.vert:
+        fig_spec["orient"] = "vert"
+    else:
+        fig_spec["orient"] = "horiz"
 
     _case = ("ctl", "ctl")
     cases.append(_case)
