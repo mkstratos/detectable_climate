@@ -27,7 +27,7 @@ def parse_args():
     parser.add_argument("--alpha", default=0.05, type=float, help="Significance level")
     parser.add_argument("--ext", default="png", type=str, help="Image file extension")
     parser.add_argument(
-        "--vert", type="store_true", default=False, help="Orient figures in vertical"
+        "--vert", action="store_true", default=False, help="Orient figures in vertical"
     )
     return parser.parse_args()
 
