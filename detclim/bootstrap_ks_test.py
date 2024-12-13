@@ -13,38 +13,15 @@ import numpy as np
 import scipy.stats as sts
 import xarray as xr
 from dask.distributed import Client
+import detclim
+
 
 plt.style.use("ggplot")
 
-# CASES = {
-#     "ctl": "20230124.F2010.ne4_oQU240.dtcl_zmconv_c0_0p00200_n0120",
-#     "ctl-2mo": "20230126.F2010.ne4_oQU240.dtcl_zmconv_c0_0p00200_n0120",
-#     "1pct-2mo": "20230126.F2010.ne4_oQU240.dtcl_zmconv_c0_0p00202_n0120",
-#     "0p5pct": "20221205.F2010.ne4_oQU240.dtcl_zmconv_c0_0p00201_n0030",
-#     "2p5pct": "20230124.F2010.ne4_oQU240.dtcl_zmconv_c0_0p00205_n0120",
-#     "5pct": "20221205.F2010.ne4_oQU240.dtcl_zmconv_c0_0p00201_n0030",
-#     "10pct": "20221201.F2010.ne4_oQU240.dtcl_zmconv_c0_0p0022_n0030",
-#     "50pct": "20221206.F2010.ne4_oQU240.dtcl_zmconv_c0_0p0030_n0030",
-#     "old-ctl": "20221130.F2010.ne4_oQU240.dtcl_control_n0030",
-#     "old-2p5pct": "20230123.F2010.ne4_oQU240.dtcl_zmconv_c0_0p00205_n0120",
-#     "new-ctl": "20230403.F2010.ne4_oQU240.dtcl_zmconv_c0_0p00200_n0120",
-#     "new-2p5pct": "20230325.F2010.ne4_oQU240.dtcl_zmconv_c0_0p00205_n0120",
-#     "new-5pct": "20230403.F2010.ne4_oQU240.dtcl_zmconv_c0_0p00210_n0120",
-#     "new-10pct": "20230329.F2010.ne4_oQU240.dtcl_zmconv_c0_0p00220_n0120",
-#     "c1-1pct": "20230422.F2010.ne4_oQU240.dtcl_clubb_c1_2p4240_n0120",
-#     "gworo-10pct": "20230515.F2010.ne4_oQU240.dtcl_effgw_oro_0p4125_n0120",
-#     "gworo-1pct": "20230517.F2010.ne4_oQU240.dtcl_effgw_oro_0p37875_n0120",
-#     "pl_1e-10": "20230321.F2010.ne4_oQU240.dtcl_pertlim_1e-10_n0120",
-#     "pl_1e-14": "20230322.F2010.ne4_oQU240.dtcl_pertlim_1e-14_n0120",
-#     "gworo-1yr-0p5pct": "20230615.F2010.ne4_oQU240.dtcl_effwg_oro_0p376875_n0120",
-#     "gworo-1yr-1pct": "20230613.F2010.ne4_oQU240.dtcl_effgw_oro_0p3787_n0120",
-#     "gworo-1yr-10pct": "20230613.F2010.ne4_oQU240.dtcl_effgw_oro_0p4125_n0120",
-# }
 
 REJECT_THR = 0.05
 
 
-# @dask.delayed
 def ks_all_times_nv(data_1, data_2):
     """Perform K-S test on two arrays across all times in the array.
 
@@ -85,18 +62,9 @@ def ks_all_times(data_1, data_2):
         results (statstic, p-value)
 
     """
-    # ks_test = np.vectorize(sts.mstats.ks_2samp, signature="(n),(n)->(),()", excluded=["method"])
-    # ks_stat, ks_pval = ks_test(data_1.T, data_2.T, method="asymp")
     ks_test = np.vectorize(sts.mstats.ks_2samp, signature="(n),(n)->(),()")
     ks_stat, ks_pval = ks_test(data_1.T, data_2.T)
     return da.array(ks_stat), da.array(ks_pval)  # type: ignore
-    # return da.array(ks_test(data_1, data_2, method="asymp"))
-    # return da.array(
-    #     [
-    #         sts.ks_2samp(data_1[:, _tix], data_2[:, _tix], method="asymp")
-    #         for _tix in range(data_1.shape[1])
-    #     ]
-    # )
 
 
 def randomise_sample(ens_data, case_abbr, ens_size=30, niter=1):
@@ -354,37 +322,13 @@ def ks_bootstrap(ens_data, case_abbr, dask_client, n_iter=5, test_size=30, permu
     with open("run_scripts/new_vars.json", "r", encoding="utf-8") as _vf_in:
         data_vars = sorted(json.load(_vf_in)["default"])
     vars_out = []
-    # random_index = [
-    #     [
-    #         random.sample(
-    #             list([_ for _ in range(ens_data[case_abbr[0]]["ens"].shape[0])]),
-    #             test_size,
-    #         )
-    #         for _ in range(n_iter)
-    #     ],
-    #     [
-    #         random.sample(
-    #             list([_ for _ in range(ens_data[case_abbr[1]]["ens"].shape[0])]),
-    #             test_size,
-    #         )
-    #         for _ in range(n_iter)
-    #     ],
-    # ]
 
-    # random_index = [
-    #     [
-    #         random.sample(
-    #             list(range(ens_data[_abbr]["ens"].shape[0])),
-    #             test_size,
-    #         )
-    #         for _ in range(n_iter)
-    #     ]
-    #     for _abbr in case_abbr
-    # ]
     if not permute:
         # Get random sample, outputs a dict: {case_a: [i1, i2, ...], case_b: [i1, i2, ...]}
         random_index, _ = randomise_sample(ens_data, case_abbr, test_size, niter=n_iter)
         print(f"RANDOM INDEX SIZE: {np.array(random_index).shape}")
+    else:
+        raise NotImplementedError("Random index permutation not yet implemented")
 
     for rse in range(n_iter):
         var_futures = []
@@ -560,11 +504,8 @@ def main(case_a="ctl", case_b="5pct", run_len="1year", n_iter=5, nnodes=1, rolli
         Number of ensemble members per test, default 30
 
     """
-    with open("case_db.json", "r", encoding="utf-8") as _cdb:
+    with open(Path(detclim.data_path, "case_db.json"), "r", encoding="utf-8") as _cdb:
         cases = json.loads(_cdb.read())
-
-    # with open("run_scripts/new_vars.json", "r", encoding="utf-8") as _vf_in:
-    #     test_vars = sorted(json.load(_vf_in)["default"])
 
     scratch = Path("/lcrc/group/e3sm/ac.mkelleher/scratch/chrys/")
     case_dirs = {

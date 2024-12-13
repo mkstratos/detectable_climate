@@ -128,4 +128,8 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
+# Run directories
 run_scripts/*F2010*
+
+# SLURM logs
+slurm-*.out
