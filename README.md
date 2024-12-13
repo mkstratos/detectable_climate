@@ -12,6 +12,11 @@ the E3SM Earth system model primarily by reducing the number of false positive t
 (e.g. a statstical type I error where the test claims two ensembles have different
 simulated climates when in fact they are not)
 
+
+## Status
+[![Pre-Commit](https://github.com/mkstratos/detectable_climate/actions/workflows/pre-commit.yml/badge.svg)](https://github.com/mkstratos/detectable_climate/actions/workflows/pre-commit.yml)
+[![Python Tests](https://github.com/mkstratos/detectable_climate/actions/workflows/python-tests.yml/badge.svg)](https://github.com/mkstratos/detectable_climate/actions/workflows/python-tests.yml)
+
 ## Package directories
 
 - The `run_scripts` directory contains scripts nessecary for setup and execution of
