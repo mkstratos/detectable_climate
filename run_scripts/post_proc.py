@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-from pathlib import Path
+import argparse
+import multiprocessing as mp
+import shutil
 import subprocess as sp
 from functools import partial
-import multiprocessing as mp
-import argparse
-import shutil
+from pathlib import Path
 
 NCPU = mp.cpu_count()
 
@@ -35,9 +35,7 @@ def parse_args(args=None):
         help="Combine --case with --base",
     )
     parser.add_argument(
-        "--mach",
-        default="chrys",
-        help="Machine on which the run took place"
+        "--mach", default="chrys", help="Machine on which the run took place"
     )
     return parser.parse_args()
 
@@ -101,8 +99,8 @@ def combine_files(ninst, file_dir):
 
 def combine_ensembles(scratch, base_case_name, new_case_name, debug=False):
     """Move cloned case files into another directory to combine outputs."""
-    new_files = sorted(Path(scratch, new_case_name, "run").glob(f"*aavg.nc"))
-    old_files = sorted(Path(scratch, base_case_name, "run").glob(f"*aavg.nc"))
+    new_files = sorted(Path(scratch, new_case_name, "run").glob("*aavg.nc"))
+    old_files = sorted(Path(scratch, base_case_name, "run").glob("*aavg.nc"))
 
     try:
         ninst_0 = int(
@@ -122,7 +120,10 @@ def combine_ensembles(scratch, base_case_name, new_case_name, debug=False):
 
         if debug:
             print(f"{new_file.exists()}")
-            print(f"copy {new_file} to\n     {Path(scratch, base_case_name, 'run', _newname)}")
+            print(
+                f"copy {new_file} to\n     "
+                f"{Path(scratch, base_case_name, 'run', _newname)}"
+            )
         else:
             shutil.copy2(new_file, Path(scratch, base_case_name, "run", _newname))
 
@@ -167,9 +168,8 @@ def main(cl_args):
                 ),
                 case_files,
             )
-            results = _results.get()
+            _ = _results.get()
         print(f"{'#' * 20}COMPLETED{'#' * 20}")
-        # combine_files(ninst, case_dir)
 
     if cl_args.base is not None:
         combine_ensembles(scratch, cl_args.base, case, debug=debug_only)

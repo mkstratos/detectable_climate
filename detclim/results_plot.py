@@ -1,13 +1,10 @@
 """Plot the results of bootstrapping tests.
 """
 from pathlib import Path
-import matplotlib.pyplot as plt
-import xarray as xr
-import numpy as np
 
-# import pandas as pd
-# import seaborn as sns
-# from scipy import stats
+import matplotlib.pyplot as plt
+import numpy as np
+import xarray as xr
 from statsmodels.stats import multitest as smm
 
 plt.style.use("ggplot")
@@ -35,7 +32,11 @@ def fmt_case(case):
         _out = f"new {num:.1f}%"
     elif "c1" in case:
         num = float(
-            case.split("-")[1].replace("pct", "").replace("p", ".").replace("-2mo", "").replace("_ts40", "")
+            case.split("-")[1]
+            .replace("pct", "")
+            .replace("p", ".")
+            .replace("-2mo", "")
+            .replace("_ts40", "")
         )
         _out = f"clubb_c1 {num:.1f}%"
     elif "gworo" in case or "effgw_oro" in case:
@@ -173,7 +174,7 @@ def load_data(file: Path, reject_thr: float = 0.95) -> dict:
     file : Path
         Input bootstrap file path
     reject_thr : float
-        Threshold for statstical rejection of H0 (Base == Test), optional. Default = 0.95
+        Threshold for statstical rejection of H0 (Base == Test), optional. Default=0.95
 
     Returns
     -------

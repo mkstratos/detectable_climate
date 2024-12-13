@@ -1,10 +1,10 @@
 """Perform many K-S tests comparing two E3SM ensembles.
 """
-import json
-import time
-import random
-from pathlib import Path
 import argparse
+import json
+import random
+import time
+from pathlib import Path
 
 import dask
 import dask.array as da
@@ -13,8 +13,8 @@ import numpy as np
 import scipy.stats as sts
 import xarray as xr
 from dask.distributed import Client
-import detclim
 
+import detclim
 
 plt.style.use("ggplot")
 
@@ -38,7 +38,7 @@ def ks_all_times_nv(data_1, data_2):
         results (statstic, p-value)
 
     """
-    return da.array( # type: ignore
+    return da.array(  # type: ignore
         [
             sts.ks_2samp(data_1[:, _tix], data_2[:, _tix], method="asymp")
             for _tix in range(data_1.shape[1])
@@ -154,7 +154,7 @@ def plot_single_var_summary(ens_data, case_abbr, test_var="T", group_mean=False)
     test_var : str, optional
         Variable to plot, by default "T"
     group_mean : bool, l
-        Plot against overall ensemble mean rather than a left-out member, by default False
+        Plot against overall ensemble mean rather than a left-out member, default False
 
     """
     # (ens_data - ens_data.mean(dim="ens"))["U"].plot.line(x="time")
@@ -291,7 +291,9 @@ def ks_bootstrap_serial(ens_data, case_abbr, data_vars, permute):
     return np.array(ks_stat_i), np.array(ks_pval_i)
 
 
-def ks_bootstrap(ens_data, case_abbr, dask_client, n_iter=5, test_size=30, permute=False):
+def ks_bootstrap(
+    ens_data, case_abbr, dask_client, n_iter=5, test_size=30, permute=False
+):
     """Perform multiple K-S tests on selected variables in two ensembles.
 
     Parameters
@@ -324,7 +326,8 @@ def ks_bootstrap(ens_data, case_abbr, dask_client, n_iter=5, test_size=30, permu
     vars_out = []
 
     if not permute:
-        # Get random sample, outputs a dict: {case_a: [i1, i2, ...], case_b: [i1, i2, ...]}
+        # Get random sample, outputs a
+        # dict: {case_a: [i1, i2, ...], case_b: [i1, i2, ...]}
         random_index, _ = randomise_sample(ens_data, case_abbr, test_size, niter=n_iter)
         print(f"RANDOM INDEX SIZE: {np.array(random_index).shape}")
     else:
@@ -485,7 +488,16 @@ def rolling_mean_data(ens_data, cases, period_len=12, time_var="time"):
     return {_case: xr.Dataset(rolling_means[_case]) for _case in cases}
 
 
-def main(case_a="ctl", case_b="5pct", run_len="1year", n_iter=5, nnodes=1, rolling=0, permute=False, test_size=30):
+def main(
+    case_a="ctl",
+    case_b="5pct",
+    run_len="1year",
+    n_iter=5,
+    nnodes=1,
+    rolling=0,
+    permute=False,
+    test_size=30,
+):
     """Perform bootstrap K-S testing of two ensembles of E3SM
 
     Parameters
@@ -527,7 +539,12 @@ def main(case_a="ctl", case_b="5pct", run_len="1year", n_iter=5, nnodes=1, rolli
         print(client)
         print(f"PERFORM {n_iter} TESTS")
         ks_stat, ks_pval, rnd_indx, test_vars = ks_bootstrap(
-            ens_data, [case_a, case_b], client, n_iter=n_iter, permute=permute, test_size=test_size
+            ens_data,
+            [case_a, case_b],
+            client,
+            n_iter=n_iter,
+            permute=permute,
+            test_size=test_size,
         )
         time.sleep(1)
         print("OUTPUT TO FILE")

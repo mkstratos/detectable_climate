@@ -2,12 +2,12 @@
 # -*- coding: utf-8 -*-
 """Clone a run, submit the case, postprocess, (todo: do the KS Test bootstrapping).
 """
-import subprocess as sp
-from pathlib import Path
-import os
+import argparse
 import datetime as dt
 import json
-import argparse
+import os
+import subprocess as sp
+from pathlib import Path
 
 PARAM_DEFAULTS = {
     "effgw_oro": 0.375,

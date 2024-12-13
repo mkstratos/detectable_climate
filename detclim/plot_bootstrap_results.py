@@ -235,11 +235,17 @@ def plot_rej_vars(
     """
     if "vert" in fig_spec["orient"].lower():
         fig, axes = plt.subplots(
-            2, 1, figsize=(fig_spec["width"], 2 * fig_spec["width"]), dpi=fig_spec["dpi"]
+            2,
+            1,
+            figsize=(fig_spec["width"], 2 * fig_spec["width"]),
+            dpi=fig_spec["dpi"],
         )
     else:
         fig, axes = plt.subplots(
-            1, 2, figsize=(2 * fig_spec["width"], fig_spec["width"]), dpi=fig_spec["dpi"]
+            1,
+            2,
+            figsize=(2 * fig_spec["width"], fig_spec["width"]),
+            dpi=fig_spec["dpi"],
         )
 
     for ixp, _param in enumerate(params):
@@ -275,11 +281,11 @@ def plot_rej_vars(
         )
 
         if "vert" in fig_spec["orient"].lower():
-            x_check = (ixp == len(params) - 1)
+            x_check = ixp == len(params) - 1
             y_check = True
         else:
             x_check = True
-            y_check = (ixp == 0)
+            y_check = ixp == 0
 
         if x_check:
             axis.set_xlabel("Parameter Change [%]", fontsize=style["label_fontsize"])
@@ -358,14 +364,16 @@ def plot_tests_failed(
         )
 
         if "vert" in fig_spec["orient"].lower():
-            x_check = (ixp == len(params) - 1)
+            x_check = ixp == len(params) - 1
             y_check = True
         else:
             x_check = True
-            y_check = (ixp == 0)
+            y_check = ixp == 0
 
         if x_check:
-            axis[ixp].set_xlabel("Parameter Change [%]", fontsize=style["label_fontsize"])
+            axis[ixp].set_xlabel(
+                "Parameter Change [%]", fontsize=style["label_fontsize"]
+            )
 
         if y_check:
             axis[ixp].set_ylabel(

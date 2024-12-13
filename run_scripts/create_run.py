@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
+import datetime as dt
+import json
 import os
 import subprocess as sp
-from pathlib import Path
-import datetime as dt
 import sys
-import json
+from pathlib import Path
 
 COMPONENT_NAMES = ["ATM", "CPL", "OCN", "WAV", "GLC", "ICE", "ROF", "LND", "ESP", "IAC"]
 "ATM" "CPL" "OCN" "WAV" "GLC" "ICE" "ROF" "LND" "ESP" "IAC"
@@ -79,7 +79,7 @@ def main(build_case=False, run_case=False):
     # param_name = "effgw_oro"
     param_name = "ctl"
     param_val = 0.37875
-    param_str = f"{param_val:.04f}".replace(".", "p")
+    # param_str = f"{param_val:.04f}".replace(".", "p")
     # case = f"{today}.{compset}.{grid}.dtcl_{param_name}_{param_str}_n{ninst:04d}"
     case = f"{today}.{compset}.{grid}.dtcl_{param_name}_{branch}_n{ninst:04d}"
     # case = f"{today}.{compset}.{grid}.dtcl_zmconv_c0_{zmconv_str}_n{ninst:04d}"
@@ -97,7 +97,7 @@ def main(build_case=False, run_case=False):
         str(Path(cime_scripts_dir, "create_newcase")),
         f"--compset {compset}",
         f"--res {grid}",
-        f"--walltime 03:00:00",
+        "--walltime 03:00:00",
         f"--case {case}",
         f"--machine {mach}",
         f"--ninst {ninst}",
@@ -112,7 +112,9 @@ def main(build_case=False, run_case=False):
     # data_root = Path("/lcrc/group/e3sm/data/inputdata")
     # csmdata_atm = Path(data_root, "atm/cam/inic/homme/ne4_v2_init")
     # csmdata_lnd = Path(data_root, "lnd/clm2/initdata/ne4_oQU240_v2_init")
-    data_root = Path("/lcrc/group/e3sm/ac.mkelleher/scratch/chrys/20231002.F2010.ne4_oQU240_init")
+    data_root = Path(
+        "/lcrc/group/e3sm/ac.mkelleher/scratch/chrys/20231002.F2010.ne4_oQU240_init"
+    )
     csmdata_atm = Path(data_root, "run")
     csmdata_lnd = Path(data_root, "run")
 
@@ -168,10 +170,10 @@ def main(build_case=False, run_case=False):
 
     os.system(f"./xmlchange STOP_N={sim_length}")
     os.system(f"./xmlchange STOP_OPTION={stop_option}")
-    os.system(f"./xmlchange REST_N=7")
-    os.system(f"./xmlchange REST_OPTION=nmonths")
-    os.system(f"./xmlquery GMAKE_J")
-    os.system(f"./xmlchange GMAKE_J=64")
+    os.system("./xmlchange REST_N=7")
+    os.system("./xmlchange REST_OPTION=nmonths")
+    os.system("./xmlquery GMAKE_J")
+    os.system("./xmlchange GMAKE_J=64")
     os.system("./preview_namelists")
 
     try:

@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-from pathlib import Path
-import subprocess as sp
-from functools import partial
-import multiprocessing as mp
 import argparse
-import shutil
+import multiprocessing as mp
 import os
+import shutil
+import subprocess as sp
+from pathlib import Path
 
 NCPU = mp.cpu_count()
 
@@ -36,9 +35,7 @@ def parse_args(args=None):
         help="Combine --case with --base",
     )
     parser.add_argument(
-        "--mach",
-        default="chrys",
-        help="Machine on which the run took place"
+        "--mach", default="chrys", help="Machine on which the run took place"
     )
 
     return parser.parse_args()
@@ -54,7 +51,6 @@ def combine_files(ninst, file_dir, file_s=None, file_e=None):
     for i in range(1, ninst + 1):
         _files = sorted(Path(file_dir).glob(f"*eam_{i:04d}*aavg.nc"))
         _files = _files[file_s:file_e]
-        # print(_files[0])
         out_file = _files[0].name.split(".")
         out_file = ".".join([*_files[0].name.split(".")[:-2], "aavg", "nc"])
         out_dir = Path(file_dir, "combined")
@@ -78,8 +74,8 @@ def move_files(case_dir):
 
 def combine_ensembles(scratch, base_case_name, new_case_name, debug=False):
     """Move cloned case files into another directory to combine outputs."""
-    new_files = sorted(Path(scratch, new_case_name, "run").glob(f"*aavg.nc"))
-    old_files = sorted(Path(scratch, base_case_name, "run").glob(f"*aavg.nc"))
+    new_files = sorted(Path(scratch, new_case_name, "run").glob("*aavg.nc"))
+    old_files = sorted(Path(scratch, base_case_name, "run").glob("*aavg.nc"))
 
     try:
         ninst_0 = int(
@@ -100,7 +96,8 @@ def combine_ensembles(scratch, base_case_name, new_case_name, debug=False):
         if debug:
             print(f"{new_file.exists()}")
             print(
-                f"copy {new_file} to\n     {Path(scratch, base_case_name, 'run', _newname)}"
+                f"copy {new_file} to\n     "
+                f"{Path(scratch, base_case_name, 'run', _newname)}"
             )
         else:
             shutil.copy2(new_file, Path(scratch, base_case_name, "run", _newname))
@@ -122,19 +119,10 @@ def remove_files(case_name, case_dir):
 
 def main(cl_args):
     """Post process an ensemble run."""
-    debug_only = cl_args.debug
-    overwrite = cl_args.overwrite
     case = cl_args.case
     assert case is not None, "SPECIFY CASE"
 
-    serial = False
-
     scratch = Path("/lcrc/group/e3sm/ac.mkelleher/scratch/", cl_args.mach)
-    # case = "20221128.F2010.ne4_oQU240.dtcl_control"
-    # case = "20221130.F2010.ne4_oQU240.dtcl_control_n0030"
-    # case = "20221205.F2010.ne4_oQU240.dtcl_zmconv_c0_0p00201_n0030"
-    # case = "20221206.F2010.ne4_oQU240.dtcl_zmconv_c0_0p0030_n0030"
-    # case = "20221201.F2010.ne4_oQU240.dtcl_zmconv_c0_0p0022_n0030"
 
     case_dir = Path(scratch, case, "run")
     print(f"COMBINE FILES IN {case_dir}")
