@@ -65,6 +65,8 @@ def fmt_case(case):
             case.split("_")[1].replace("pct", "").replace("p", ".").replace("-2mo", "")
         )
         _out = f"PertLim {num:.1e}"
+    elif "opt" in case or "fastmath" in case:
+        _out = case
     else:
         num = float(case.replace("pct", "").replace("p", ".").replace("-2mo", ""))
         _out = f"{num:.1f}%"

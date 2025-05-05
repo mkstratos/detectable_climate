@@ -16,7 +16,7 @@ from statsmodels.stats import multitest as smm
 
 plt.style.use("default")
 
-REJ_THR = {0.01: 6, 0.05: 12}
+REJ_THR = {0.01: 6, 0.05: 11}
 
 
 def parse_args():
@@ -129,7 +129,7 @@ class CaseData:
 
         return np.array(_pval_cr).reshape(self.ks_pval.shape)
 
-    def plot_bars(self, qtile: str = "uq", file_ext: str = "png"):
+    def plot_bars(self, qtile: str = "uq", file_ext: str = "png", vert: bool = False):
         if qtile.lower() in ["uq", "upper", "u"]:
             _qtile = 100 * (1 - self.alpha)
         elif qtile.lower() in ["lq", "lower", "l"]:
@@ -137,8 +137,11 @@ class CaseData:
         else:
             _qtile = 50
 
-        # fig, axes = plt.subplots(1, 2, figsize=(15, 4))
-        fig, axes = plt.subplots(2, 1, figsize=(4, 15))
+        if vert:
+            fig, axes = plt.subplots(2, 1, figsize=(4, 15))
+        else:
+            fig, axes = plt.subplots(1, 2, figsize=(15, 4))
+
         width = 0.333
         mult = 0
 
