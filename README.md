@@ -9,7 +9,7 @@ Submitted to [Platform for Advanced Scientific Computing (PASC) Conference](http
 ## About
 This investigation was set to improve the usability of non bit-for-bit testing in
 the E3SM Earth system model primarily by reducing the number of false positive tests
-(e.g. a statstical type I error where the test claims two ensembles have different
+(i.e. a statistical type I error where the test claims two ensembles have different
 simulated climates when in fact they are not)
 
 
