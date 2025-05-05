@@ -23,7 +23,17 @@ conda activate detcli
 
 # CASE=20230615.F2010.ne4_oQU240.dtcl_effwg_oro_0p376875_n0120
 # CASE=20230613.F2010.ne4_oQU240.dtcl_effgw_oro_0p4125_n0120
-echo POSTPROCESSING ${CASE} on ${MACH}
+
 # /usr/bin/time -f "TIME: %es\n MEM: %M KB\n CPU: %P" \
-python3 post_proc.py --case ${CASE} --mach ${MACH} && \
-python3 post_proc_pertlim_test.py --case ${CASE} --mach ${MACH}
+BASE=20250409.F2010.ne4_oQU240.dtcl_fastmath_n0120
+MACH=chrys
+# python3 post_proc.py --case ${BASE} --mach ${MACH}
+
+for inst in 31 61 91
+do
+    case=${BASE}_${inst}
+    echo POSTPROCESSING ${case} on ${MACH}
+    python3 post_proc.py --case ${case} --mach ${MACH} --base ${BASE}
+done
+echo "FINALISING ${BASE}"
+python3 post_proc_pertlim_test.py --case ${BASE} --mach ${MACH}
