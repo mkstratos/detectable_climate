@@ -321,7 +321,7 @@ def ks_bootstrap(
 
     """
     futures = []
-    with open("run_scripts/new_vars.json", "r", encoding="utf-8") as _vf_in:
+    with open("new_vars.json", "r", encoding="utf-8") as _vf_in:
         data_vars = sorted(json.load(_vf_in)["default"])
     vars_out = []
 
