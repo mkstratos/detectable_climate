@@ -25,11 +25,11 @@ conda activate detcli
 # CASE=20230613.F2010.ne4_oQU240.dtcl_effgw_oro_0p4125_n0120
 
 # /usr/bin/time -f "TIME: %es\n MEM: %M KB\n CPU: %P" \
-BASE=20250409.F2010.ne4_oQU240.dtcl_fastmath_n0120
-MACH=chrys
+BASE=20250603.F2010.ne4pg2_oQU480.dtcl_ctl_maint-3.0_n0060
+MACH=anvil
 # python3 post_proc.py --case ${BASE} --mach ${MACH}
 
-for inst in 31 61 91
+for inst in b c d e f g h i j k l m n o p q
 do
     case=${BASE}_${inst}
     echo POSTPROCESSING ${case} on ${MACH}

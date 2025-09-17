@@ -16,7 +16,7 @@ from statsmodels.stats import multitest as smm
 
 plt.style.use("default")
 
-REJ_THR = {0.01: 6, 0.05: 11}
+REJ_THR = {0.01: 6, 0.05: 12}
 
 
 def parse_args():
@@ -52,9 +52,10 @@ def reject_vars(pvals: np.ndarray, alpha: float = 0.05):
 
 class CaseData:
     methods = {
-        "uncor": "Un-corrected",
-        "fdr_bh": "Corr [B-H]",
-        # "fdr_by": "Corr [B-Y]",
+        "uncor": "MVK",
+        "fdr_bh": "B-H FDR",
+        "fdr_by": "B-Y FDR",
+        "bonferroni": "Bonf. FDR",
     }
 
     def __init__(
@@ -65,11 +66,12 @@ class CaseData:
         uc_thr: int = 11,
         alpha: float = 0.05,
         pct_change: float = 0,
+        esize: int = 30,
     ):
         _corr_methods = [
             "fdr_bh",
-            # "fdr_by",
-            # "bonferroni",
+            "fdr_by",
+            "bonferroni",
             # "fdr_tsbh",
             # "fdr_tsbky",
         ]
@@ -81,6 +83,7 @@ class CaseData:
         self.n_iter = int(btsp_file.stem.split("_")[-1][1:])
         _ks_res = xr.open_dataset(btsp_file)
         self.time_step = np.arange(_ks_res.time.shape[0])
+        self.esize = esize
 
         self.ks_pval = _ks_res["pval"].values
         self.pval_cr = {}
@@ -260,7 +263,7 @@ def plot_rej_vars(
                 _nvars["pct_change"],
                 _nvars[_method],
                 color=style["colors"][ixp],
-                linestyle=style["lstyle"][ixm % 3],
+                linestyle=style["lstyle"][ixm % 4],
                 marker=style["markers"][ixm],
                 label=f"{params[_param]}: {_method_hum} {qtile:.0f}%",
             )
@@ -273,14 +276,14 @@ def plot_rej_vars(
             color="k",
             ls="--",
             lw=style["linewidth"],
-            label="Global test failure threshold [cor]",
+            label="Global test failure threshold [MVK]",
         )
         axis.axhline(
             REJ_THR[case_data[_param][0].alpha],
             color="k",
             ls="-",
             lw=style["linewidth"],
-            label="Global test failure threshold [unc]",
+            label="Global test failure threshold [B-H FDR]",
         )
 
         if "vert" in fig_spec["orient"].lower():
@@ -349,7 +352,7 @@ def plot_tests_failed(
                 _ntests["pct_change"],
                 _ntests[_method],
                 color=style["colors"][ixp],
-                linestyle=style["lstyle"][ixm % 3],
+                linestyle=style["lstyle"][ixm % 4],
                 marker=style["markers"][ixm],
                 label=f"{params[_param]}: {_method_hum}",
             )
@@ -498,7 +501,7 @@ def main(args):
         "legend_fontsize": 8,
         "tick_fontsize": 10,
         "colors": ["C1", "C4", "C6"],
-        "lstyle": ["-", "--", "-."],
+        "lstyle": ["-", "--", "-.", ":"],
         "markers": ["o", "x", "+", "h", ".", "*"],
     }
     for _ti in [0, 1, 2]:

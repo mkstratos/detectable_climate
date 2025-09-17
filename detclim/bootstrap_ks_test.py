@@ -555,11 +555,13 @@ def main(
             run_shape = run_len
         else:
             run_shape = f"{run_len}_{rolling}avg"
-        if test_size != 30:
-            run_shape += f"_ts{test_size}"
+        # if test_size != 30:
+        run_shape += f"_ts{test_size}"
+
+        out_dir = Path("bootstrap_data")
         ds_out.to_netcdf(
             Path(
-                "bootstrap_data",
+                out_dir,
                 f"bootstrap_output.{run_shape}.{case_a}_{case_b}_n{n_iter}.nc",
             )
         )
@@ -592,6 +594,12 @@ def parse_args():
         default=False,
         help="Use permutation method for control",
     )
+    parser.add_argument(
+        "--esize",
+        default=30,
+        type=int,
+        help="Ensemble size, default=30",
+    )
     return parser.parse_args()
 
 
@@ -606,5 +614,5 @@ if __name__ == "__main__":
         nnodes=int(cl_args.nodes),
         rolling=int(cl_args.rolling),
         permute=cl_args.permute,
-        test_size=30,
+        test_size=cl_args.esize,
     )

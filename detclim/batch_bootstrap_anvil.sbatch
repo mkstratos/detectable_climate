@@ -10,10 +10,18 @@
 source /soft/anaconda3/2020.11/etc/profile.d/conda.sh
 conda activate detcli
 
-python3 bootstrap_ks_test.py \
-    --base ${CASEA} \
-    --test ${CASEB} \
-    --runlen ${RUNLEN} \
-    --iter 500 \
-    --nodes 1 \
-    --rolling 12
+RUNLEN=1year
+CASEA=ctl
+CASEB=clubb_c1-5p0pct
+
+for esize in 10 20 30 40 50 60
+do
+    python3 bootstrap_ks_test.py \
+        --base ${CASEA} \
+        --test ${CASEB} \
+        --runlen ${RUNLEN} \
+        --iter 1000 \
+        --nodes 1 \
+        --rolling 12 \
+        --esize ${esize}
+done

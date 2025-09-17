@@ -37,6 +37,12 @@ def parse_args(args=None):
     parser.add_argument(
         "--mach", default="chrys", help="Machine on which the run took place"
     )
+    parser.add_argument(
+        "--aavg",
+        default=False,
+        action="store_true",
+        help="Perform area-weighted averaging on all files"
+    )
     return parser.parse_args()
 
 
@@ -99,8 +105,10 @@ def combine_files(ninst, file_dir):
 
 def combine_ensembles(scratch, base_case_name, new_case_name, debug=False):
     """Move cloned case files into another directory to combine outputs."""
-    new_files = sorted(Path(scratch, new_case_name, "run").glob("*aavg.nc"))
-    old_files = sorted(Path(scratch, base_case_name, "run").glob("*aavg.nc"))
+    # new_files = sorted(Path(scratch, new_case_name, "run").glob("*aavg.nc"))
+    # old_files = sorted(Path(scratch, base_case_name, "run").glob("*aavg.nc"))
+    new_files = sorted(Path(scratch, new_case_name, "run").glob("*eam*h0*.nc"))
+    old_files = sorted(Path(scratch, base_case_name, "run").glob("*eam*h0*.nc"))
 
     try:
         ninst_0 = int(
@@ -135,7 +143,7 @@ def main(cl_args):
     case = cl_args.case
     assert case is not None, "SPECIFY CASE"
 
-    serial = False
+    serial = True
 
     scratch = Path("/lcrc/group/e3sm/ac.mkelleher/scratch/", cl_args.mach)
     # case = "20221128.F2010.ne4_oQU240.dtcl_control"
@@ -148,28 +156,29 @@ def main(cl_args):
     case_files = sorted(case_dir.glob(f"{case}.eam_*.h0*.nc"))
     case_files = [_file for _file in case_files if "aavg" not in _file.name]
 
-    if serial:
-        for _file in case_files:
-            nco_aavg(_file, overwrite=overwrite, debug_only=debug_only)
-        print(f"DONE: {_file}")
-        _check = sp.check_output(["ncdump", "-v", "T", _file])
-        print("\t" + " ".join(_check.decode().split("\n")[-4:-3]).strip())
-    else:
-        # pool_size = min(NCPU, len(case_files) // 2)
-        pool_size = 120
-        print(f"DO AREA AVG TO {len(case_files)} FILES WITH {pool_size} PROCESSES")
-        print(f"    {case_files[0].name}")
-        with mp.Pool(pool_size) as pool:
-            _results = pool.map_async(
-                partial(
-                    nco_aavg,
-                    overwrite=overwrite,
-                    debug_only=debug_only,
-                ),
-                case_files,
-            )
-            _ = _results.get()
-        print(f"{'#' * 20}COMPLETED{'#' * 20}")
+    if cl_args.aavg:
+        if serial:
+            for _file in case_files:
+                nco_aavg(_file, overwrite=overwrite, debug_only=debug_only)
+            print(f"DONE: {_file}")
+            _check = sp.check_output(["ncdump", "-v", "T", _file])
+            print("\t" + " ".join(_check.decode().split("\n")[-4:-3]).strip())
+        else:
+            # pool_size = min(NCPU, len(case_files) // 2)
+            pool_size = 120
+            print(f"DO AREA AVG TO {len(case_files)} FILES WITH {pool_size} PROCESSES")
+            print(f"    {case_files[0].name}")
+            with mp.Pool(pool_size) as pool:
+                _results = pool.map_async(
+                    partial(
+                        nco_aavg,
+                        overwrite=overwrite,
+                        debug_only=debug_only,
+                    ),
+                    case_files,
+                )
+                _ = _results.get()
+            print(f"{'#' * 20}COMPLETED{'#' * 20}")
 
     if cl_args.base is not None:
         combine_ensembles(scratch, cl_args.base, case, debug=debug_only)
