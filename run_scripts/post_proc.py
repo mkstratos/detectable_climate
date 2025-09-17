@@ -41,7 +41,7 @@ def parse_args(args=None):
         "--aavg",
         default=False,
         action="store_true",
-        help="Perform area-weighted averaging on all files"
+        help="Perform area-weighted averaging on all files",
     )
     return parser.parse_args()
 
