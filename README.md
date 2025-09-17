@@ -16,6 +16,8 @@ simulated climates when in fact they are not)
 ## Status
 [![Pre-Commit](https://github.com/mkstratos/detectable_climate/actions/workflows/pre-commit.yml/badge.svg)](https://github.com/mkstratos/detectable_climate/actions/workflows/pre-commit.yml)
 [![Python Tests](https://github.com/mkstratos/detectable_climate/actions/workflows/python-tests.yml/badge.svg)](https://github.com/mkstratos/detectable_climate/actions/workflows/python-tests.yml)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.15343054.svg)](https://doi.org/10.5281/zenodo.15343054)
+
 
 ## Package directories
 
