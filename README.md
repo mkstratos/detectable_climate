@@ -3,7 +3,7 @@
 Scripts and notebooks related to the manuscript titled:
 "Improving Climate Reproducibility Testing with False Discovery Rate Correction".
 
-Submitted to [Platform for Advanced Scientific Computing (PASC) Conference](https://pasc25.pasc-conference.org/)
+Submitted to [Earth System Dynamics](https://egusphere.copernicus.org/preprints/2025/egusphere-2025-2311/) special issue on "Theoretical and computational aspects of ensemble design, implementation, and interpretation in climate science"
 
 
 ## About
