@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 # coding: utf-8
-"""Plot results from K-S test bootstrapping, perform FDR Corrections.
-"""
+"""Plot results from K-S test bootstrapping, perform FDR Corrections."""
 
 import argparse
 from pathlib import Path
@@ -16,7 +15,10 @@ from statsmodels.stats import multitest as smm
 
 plt.style.use("default")
 
-REJ_THR = {0.01: 6, 0.05: 12}
+REJ_THR = {
+    0.01: {"ks": 6, "cvm": 9, "mw": 9, "es": 8},
+    0.05: {"ks": 11, "cvm": 16, "mw": 16, "es": 15},
+}
 
 
 def parse_args():
@@ -57,13 +59,13 @@ class CaseData:
         "fdr_by": "B-Y FDR",
         "bonferroni": "Bonf. FDR",
     }
+    stests = {"ks": "K-S", "cvm": "CVM", "mw": "M-W", "es": "E-S"}
 
     def __init__(
         self,
         btsp_file: Path,
         case_a: str,
         case_b: str = "",
-        uc_thr: int = 11,
         alpha: float = 0.05,
         pct_change: float = 0,
         esize: int = 30,
@@ -85,54 +87,77 @@ class CaseData:
         self.time_step = np.arange(_ks_res.time.shape[0])
         self.esize = esize
 
-        self.ks_pval = _ks_res["pval"].values
-        self.pval_cr = {}
+        self.ks_pval = _ks_res["cvm"].values
+        self.pvals = {_test: _ks_res[_test].values for _test in self.stests}
+
         self.pval_cr = {
-            _method: self._correct_pvals(_method) for _method in _corr_methods
+            _test: {
+                _method: self._correct_pvals(_test, _method)
+                for _method in _corr_methods
+            }
+            for _test in self.stests
         }
-        self.nreject = {"uncor": reject_vars(self.ks_pval, self.alpha)}
+        # self.nreject = {"uncor": reject_vars(self.ks_pval, self.alpha)}
+        self.nreject = {
+            _test: {"uncor": reject_vars(self.pvals[_test], self.alpha)}
+            for _test in self.stests
+        }
+        for _test in self.stests:
+            for _method in _corr_methods:
+                self.nreject[_test][_method] = reject_vars(self.pval_cr[_test][_method])
 
+        self.thrs = {"uncor": REJ_THR[alpha]}
         for _method in _corr_methods:
-            self.nreject[_method] = reject_vars(self.pval_cr[_method])
-
-        self.thrs = {"uncor": uc_thr}
-        for _method in _corr_methods:
-            self.thrs[_method] = 0
+            self.thrs[_method] = {_stest: 0 for _stest in self.stests}
 
         self.reject_qtiles = self._compute_stats()
 
         # Number of failed tests based on threshold, set by control run for
         # un-corrected, 0 for corrected
         self.ntests = {
-            _method: (self.nreject[_method] > self.thrs[_method]).sum(axis=0)
-            for _method in self.nreject
+            _test: {
+                _method: (self.nreject[_test][_method] > self.thrs[_method][_test]).sum(
+                    axis=0
+                )
+                for _method in self.nreject[_test]
+            }
+            for _test in self.stests
         }
 
     def _compute_stats(self):
         qtiles = {}
-        for _qtile in [100 * (1 - self.alpha), 50, 100 * self.alpha]:
-            qtiles[_qtile] = {
-                _method: np.percentile(self.nreject[_method], _qtile, axis=0)
-                for _method in self.nreject
-            }
+        for _test in self.stests:
+            qtiles[_test] = {}
+            for _qtile in [100 * (1 - self.alpha), 50, 100 * self.alpha]:
+                qtiles[_test][_qtile] = {
+                    _method: np.percentile(self.nreject[_test][_method], _qtile, axis=0)
+                    for _method in self.nreject[_test]
+                }
         return qtiles
 
-    def _correct_pvals(self, method: str = "fdr_bh"):
+    def _correct_pvals(self, stest: str = "ks", method: str = "fdr_bh"):
         _pval_cr = []
-        for jdx in range(self.ks_pval.shape[0]):
-            for kdx in range(self.ks_pval.shape[-1]):
+        for jdx in range(self.pvals[stest].shape[0]):
+            for kdx in range(self.pvals[stest].shape[-1]):
                 _pval_cr.append(
                     smm.multipletests(
-                        pvals=self.ks_pval[jdx, :, kdx],
+                        pvals=self.pvals[stest][jdx, :, kdx],
                         alpha=self.alpha,
                         method=method,
                         is_sorted=False,
                     )[1]
                 )
 
-        return np.array(_pval_cr).reshape(self.ks_pval.shape)
+        return np.array(_pval_cr).reshape(self.pvals[stest].shape)
 
-    def plot_bars(self, qtile: str = "uq", file_ext: str = "png", vert: bool = False):
+    def plot_bars(
+        self,
+        qtile: str = "uq",
+        file_ext: str = "png",
+        vert: bool = False,
+        stest: str = "ks",
+    ):
+        stest = "ks"
         if qtile.lower() in ["uq", "upper", "u"]:
             _qtile = 100 * (1 - self.alpha)
         elif qtile.lower() in ["lq", "lower", "l"]:
@@ -148,7 +173,7 @@ class CaseData:
         width = 0.333
         mult = 0
 
-        for name, nreject in self.reject_qtiles[_qtile].items():
+        for name, nreject in self.reject_qtiles[stest][_qtile].items():
             offset = width * mult
             rect = axes[0].bar(
                 self.time_step + offset,
@@ -161,7 +186,7 @@ class CaseData:
 
         axes[0].bar_label(rect, padding=3)
         axes[0].axhline(
-            REJ_THR[self.alpha],
+            REJ_THR[self.alpha][stest],
             color="#600",
             ls="--",
             label="Failure thr [uncorrected]",
@@ -183,7 +208,7 @@ class CaseData:
         axes[0].set_ylabel("N variables")
 
         mult = 0
-        for name, itest in self.ntests.items():
+        for name, itest in self.ntests[stest].items():
             offset = width * mult
             rect = axes[1].bar(
                 self.time_step + offset,
@@ -197,7 +222,7 @@ class CaseData:
             mult += 1
 
         axes[1].axhline(
-            self.alpha * self.ks_pval.shape[0],
+            self.alpha * self.pvals[stest].shape[0],
             color="#343",
             ls="-.",
             label=f"{self.alpha * 100}% of tests",
@@ -213,16 +238,26 @@ class CaseData:
 
         axes[1].set_xlabel("Simulated month")
 
-        axes[1].set_title(f'Number of tests (of {self.ks_pval.shape[0]}) "failing"')
+        axes[1].set_title(
+            f'Number of tests (of {self.pvals[stest].shape[0]}) "failing"'
+        )
 
         _reject = f"{self.alpha:.2f}".replace(".", "p")
         fig.suptitle(f"{self.cases[0]} x {self.cases[1]}")
         plt.tight_layout()
-        plt.savefig(f"plt_{self.cases[0]}-{self.cases[1]}_n{self.n_iter}.{file_ext}")
+        plt.savefig(
+            f"plt_{self.cases[0]}-{self.cases[1]}_{stest}_n{self.n_iter}.{file_ext}"
+        )
 
 
 def plot_rej_vars(
-    case_data: dict, idx: int, qtile: float, params: dict, fig_spec: dict, style: dict
+    case_data: dict,
+    idx: int,
+    qtile: float,
+    params: dict,
+    fig_spec: dict,
+    style: dict,
+    stest: str,
 ):
     """
     Plot the number of rejected variables
@@ -239,23 +274,24 @@ def plot_rej_vars(
         _description_
 
     """
+    nparams = len(params)
     if "vert" in fig_spec["orient"].lower():
         fig, axes = plt.subplots(
-            2,
+            nparams,
             1,
-            figsize=(fig_spec["width"], 2 * fig_spec["width"]),
+            figsize=(fig_spec["width"], nparams * fig_spec["width"]),
             dpi=fig_spec["dpi"],
         )
     else:
         fig, axes = plt.subplots(
             1,
-            2,
-            figsize=(2 * fig_spec["width"], fig_spec["width"]),
+            nparams,
+            figsize=(nparams * fig_spec["width"], fig_spec["width"]),
             dpi=fig_spec["dpi"],
         )
 
     for ixp, _param in enumerate(params):
-        _nvars = reject_qtiles(case_data[_param], idx, qtile)
+        _nvars = reject_qtiles(case_data[_param], idx, qtile)[stest]
         axis = axes[ixp]
         for ixm, _method in enumerate(case_data[_param][0].methods):
             _method_hum = case_data[_param][0].methods[_method]
@@ -279,7 +315,7 @@ def plot_rej_vars(
             label="Global test failure threshold [MVK]",
         )
         axis.axhline(
-            REJ_THR[case_data[_param][0].alpha],
+            REJ_THR[case_data[_param][0].alpha][stest],
             color="k",
             ls="-",
             lw=style["linewidth"],
@@ -305,11 +341,16 @@ def plot_rej_vars(
         style_axis(axis, style)
 
     fig.tight_layout()
-    fig.savefig(f"plt_nrej_vars_{idx}_q{qtile:.0f}.{fig_spec['ext']}")
+    fig.savefig(f"plt_nrej_vars_{stest}_{idx}_q{qtile:.0f}.{fig_spec['ext']}")
 
 
 def plot_tests_failed(
-    case_data: dict, idx: int, params: dict, fig_spec: dict, style: dict
+    case_data: dict,
+    idx: int,
+    params: dict,
+    fig_spec: dict,
+    style: dict,
+    stest: str,
 ):
     """
     Plot the number of rejected variables
@@ -324,28 +365,29 @@ def plot_tests_failed(
         _description_
 
     """
+    nparams = len(params)
     # Horizontal orientation
     if "horiz" in fig_spec["orient"].lower():
         fig, axis = plt.subplots(
             1,
-            2,
-            figsize=(2 * fig_spec["width"], fig_spec["width"]),
+            nparams,
+            figsize=(nparams * fig_spec["width"], fig_spec["width"]),
             dpi=fig_spec["dpi"],
             sharey=True,
         )
     # Vertical orientation
     else:
         fig, axis = plt.subplots(
-            2,
+            nparams,
             1,
-            figsize=(fig_spec["width"], 2 * fig_spec["width"]),
+            figsize=(fig_spec["width"], nparams * fig_spec["width"]),
             dpi=fig_spec["dpi"],
             sharey=True,
         )
     axis = axis.flatten()
 
     for ixp, _param in enumerate(params):
-        _ntests = ntests(case_data[_param], idx)
+        _ntests = ntests(case_data[_param], idx)[stest]
         for ixm, _method in enumerate(case_data[_param][0].methods):
             _method_hum = case_data[_param][0].methods[_method]
             axis[ixp].semilogy(
@@ -366,7 +408,7 @@ def plot_tests_failed(
             color="k",
             ls="--",
             lw=style["linewidth"],
-            label=f"{case_data[_param][0].alpha*100:.0f}% of tests ({_alphapct:.0f})",
+            label=f"{case_data[_param][0].alpha * 100:.0f}% of tests ({_alphapct:.0f})",
         )
 
         if "vert" in fig_spec["orient"].lower():
@@ -398,7 +440,7 @@ def plot_tests_failed(
 
     fig.tight_layout()
     _alphastr = f"{case_data[_param][0].alpha:.02f}".replace(".", "p")
-    fig.savefig(f"plt_nfailed_tests_{idx}_a{_alphastr}.{fig_spec['ext']}")
+    fig.savefig(f"plt_nfailed_tests_{stest}_{idx}_a{_alphastr}.{fig_spec['ext']}")
 
 
 def style_axis(_ax, style):
@@ -408,54 +450,183 @@ def style_axis(_ax, style):
 
 
 def reject_qtiles(case_data: list, idx: int = 0, qtile: float = 50):
-    _data = pd.DataFrame(
-        [
-            {
-                _method: _case.reject_qtiles[qtile][_method][idx]
-                for _method in _case.reject_qtiles[qtile]
-            }
-            for _case in case_data
-        ]
-    )
-    _data["pct_change"] = [_case.pct_change for _case in case_data]
+    _data = {
+        _test: pd.DataFrame(
+            [
+                {
+                    _method: _case.reject_qtiles[_test][qtile][_method][idx]
+                    for _method in _case.reject_qtiles[_test][qtile]
+                }
+                for _case in case_data
+            ]
+        )
+        for _test in case_data[0].stests
+    }
+    for _test in case_data[0].stests:
+        _data[_test]["pct_change"] = [_case.pct_change for _case in case_data]
     return _data
 
 
 def ntests(case_data: list, idx: int = 0):
-    _data = pd.DataFrame(
-        [
-            {_method: _case.ntests[_method][idx] for _method in _case.ntests}
-            for _case in case_data
-        ]
-    )
-    _data["pct_change"] = [_case.pct_change for _case in case_data]
+    _data = {
+        _test: pd.DataFrame(
+            [
+                {
+                    _method: _case.ntests[_test][_method][idx]
+                    for _method in _case.ntests[_test]
+                }
+                for _case in case_data
+            ]
+        )
+        for _test in case_data[0].stests
+    }
+    for _test in case_data[0].stests:
+        _data[_test]["pct_change"] = [_case.pct_change for _case in case_data]
     return _data
 
 
-def main(args):
+def data_extract(case_data, qtile=95.0, t_idx=-1):
+    """Convert list of case data into data for plotting all statstical test results."""
+    nfailed = {}
+    nrej_vars = {}
+    pct_change = {}
+    for param in case_data:
+        if "ctl" not in param:
+            nfailed[param] = {}
+            nrej_vars[param] = {}
+            pct_change[param] = []
+            for _case in case_data[param]:
+                pct_change[param].append(_case.pct_change)
+                for stest in _case.ntests:
+                    nfailed[param][stest] = {}
+                    nrej_vars[param][stest] = {}
+                    for method in _case.ntests[stest]:
+                        nfailed[param][stest][method] = [
+                            _case.ntests[stest][method][t_idx]
+                            for _case in case_data[param]
+                        ]
 
+                        nrej_vars[param][stest][method] = [
+                            _case.reject_qtiles[stest][qtile][method][t_idx]
+                            for _case in case_data[param]
+                        ]
+    return nfailed, nrej_vars, pct_change
+
+
+def plot_failed_tests_all(
+    nfailed, pct_change, params_hum, fig_spec, style, niter=1000, alpha=0.05
+):
+    lstyle = {"uncor": "-", "fdr_bh": "--"}
+    ornl_colours = {
+        "green": "#007833",
+        "bgreen": "#84b641",
+        "orange": "#DE762D",
+        "teal": "#1A9D96",
+        "red": "#88332E",
+        "blue": "#5091CD",
+        "gold": "#FECB00",
+    }
+    colors = {
+        "ks": ornl_colours["green"],
+        "cvm": ornl_colours["blue"],
+        "es": ornl_colours["red"],
+        "mw": ornl_colours["orange"],
+    }
+    markers = {"ks": "o", "cvm": ".", "es": "H", "mw": "x"}
+    if "horiz" in fig_spec["orient"].lower():
+        fig, axes = plt.subplots(1, 3, figsize=(15, 4), sharey=True)
+    else:
+        fig, axes = plt.subplots(3, 1, figsize=(6, 15), sharey=True, dpi=300)
+
+    for idx, param in enumerate(nfailed):
+        for stest in nfailed[param]:
+            if "es" in stest:
+                continue
+            for method in ["uncor", "fdr_bh"]:
+                axes[idx].semilogy(
+                    pct_change[param],
+                    nfailed[param][stest][method],
+                    color=colors[stest],
+                    ls=lstyle[method],
+                    marker=markers[stest],
+                    label=f"{stest} - {method}",
+                )
+        axes[idx].set_title(f"{params_hum[param]}")
+        axes[idx].set_ylim([10, 1500])
+        axes[idx].set_xlabel(f"Pct change in {param}")
+        axes[idx].grid(visible=True, ls="--", lw=0.5)
+        axes[idx].axhline(niter * alpha, color="k", ls=":")
+
+        if "vert" in fig_spec["orient"].lower():
+            x_check = idx == len(nfailed) - 1
+            y_check = True
+        else:
+            x_check = True
+            y_check = idx == 0
+
+        if x_check:
+            axes[idx].set_xlabel(
+                "Parameter Change [%]", fontsize=style["label_fontsize"]
+            )
+        else:
+            axes[idx].set_xlabel("")
+
+        if y_check:
+            axes[idx].set_ylabel(
+                (f"Tests with global\nsignificance [p < {alpha:.2f}]"),
+                fontsize=style["label_fontsize"],
+            )
+
+        for _ax in [axes[idx].xaxis, axes[idx].yaxis]:
+            _ax.set_major_formatter(ScalarFormatter(useOffset=True))
+        axes[-1].legend(fontsize=style["legend_fontsize"])
+    _ = plt.legend()
+
+    fig.tight_layout()
+    _alphastr = f"{alpha:.02f}".replace(".", "p")
+    fig.savefig(f"plt_nfailed_tests_a{_alphastr}.{fig_spec['ext']}")
+
+
+def main(args):
+    """Parse command line args, make plots."""
     run_len = "1year"
     rolling = 12
+    test_size = 30
     niter = 1000
     alpha = args.alpha
     assert 0.0 < alpha < 1.0, f"ALPHA {alpha} not in [0, 1]"
 
-    pcts = {"effgw_oro": [1, 10, 20, 30, 40, 50], "clubb_c1": [1, 3, 5, 10]}
-    params_hum = {"effgw_oro": "GW Orog", "clubb_c1": "CLUBB C1"}
+    pcts = {
+        "effgw_oro": [1, 10, 20, 30, 40, 50],
+        "clubb_c1": [1, 3, 5, 10],
+        "zmconv_c0_ocn": [0.5, 1, 3, 5],
+    }
+    params_hum = {
+        "effgw_oro": "GW Orog",
+        "clubb_c1": "CLUBB C1",
+        "zmconv_c0_ocn": "ZM Conv C0-Ocean",
+    }
 
     # Initialize list of case with control vs. control test
     cases = []
     cases_hum = []
     case_data = {}
-    _casefile = "bootstrap_output.{runlen}_{rolling}avg.{case[0]}_{case[1]}_n{niter}.nc"
+    _casefile = (
+        "bootstrap_output.{runlen}_{rolling}avg_"
+        "ts{test_size}.{case[0]}_{case[1]}_n{niter}.nc"
+    )
 
     # Add the cases for all the tested parameters
-    for _param in pcts:
+    for _param, _pcts in pcts.items():
         case_data[_param] = []
 
-        for _pct in pcts[_param]:
+        for _pct in _pcts:
             _pct_str = f"{_pct:.1f}".replace(".", "p")
-            _case = ("ctl", f"{_param}-{_pct_str}pct")
+            if "zmconv" in _param:
+                _ctlcase = "ctl-miller"
+            else:
+                _ctlcase = "ctl"
+            _case = (_ctlcase, f"{_param}-{_pct_str}pct")
             cases.append(_case)
 
             if _pct < 1:
@@ -467,12 +638,15 @@ def main(args):
             _file = Path(
                 "bootstrap_data",
                 _casefile.format(
-                    runlen=run_len, rolling=rolling, case=cases[-1], niter=niter
+                    runlen=run_len,
+                    rolling=rolling,
+                    test_size=test_size,
+                    case=cases[-1],
+                    niter=niter,
                 ),
             )
-            case_data[_param].append(
-                CaseData(_file, *_case, REJ_THR[alpha], alpha, pct_change=_pct)
-            )
+            case_data[_param].append(CaseData(_file, *_case, alpha, pct_change=_pct))
+
     fig_width = 12.5 / 2.54
     fig_spec = {
         "dpi": 300,
@@ -491,10 +665,16 @@ def main(args):
     cases_hum.append(_casehum)
     ctl_file = Path(
         "bootstrap_data",
-        _casefile.format(runlen=run_len, rolling=rolling, case=cases[0], niter=niter),
+        _casefile.format(
+            runlen=run_len,
+            rolling=rolling,
+            test_size=test_size,
+            case=cases[0],
+            niter=niter,
+        ),
     )
 
-    case_data["ctl"] = CaseData(ctl_file, *_case, REJ_THR[alpha], alpha)
+    case_data["ctl"] = CaseData(ctl_file, *_case, alpha)
     style = {
         "linewidth": 1.0,
         "label_fontsize": 12,
@@ -504,21 +684,37 @@ def main(args):
         "lstyle": ["-", "--", "-.", ":"],
         "markers": ["o", "x", "+", "h", ".", "*"],
     }
-    for _ti in [0, 1, 2]:
-        plot_rej_vars(
-            case_data,
-            _ti,
-            100 * (1 - alpha),
-            params=params_hum,
-            fig_spec=fig_spec,
-            style=style,
-        )
-        plot_tests_failed(
-            case_data, _ti, params=params_hum, fig_spec=fig_spec, style=style
-        )
+
+    nfailed, nrej_vars, pct_change = data_extract(case_data, qtile=95.0, t_idx=-1)
+
+    plot_failed_tests_all(
+        nfailed, pct_change, params_hum, fig_spec, style, niter=1000, alpha=0.05
+    )
+    # for _ti in [0, 1, 2]:
+    # _ti = 2
+
+    # for stest in case_data["ctl"].stests:
+    #     print(f"plot {stest}")
+    #     plot_rej_vars(
+    #         case_data,
+    #         _ti,
+    #         100 * (1 - alpha),
+    #         params=params_hum,
+    #         fig_spec=fig_spec,
+    #         style=style,
+    #         stest=stest,
+    #     )
+    #     plot_tests_failed(
+    #         case_data,
+    #         _ti,
+    #         params=params_hum,
+    #         fig_spec=fig_spec,
+    #         style=style,
+    #         stest=stest,
+    #     )
 
     return case_data, params_hum, fig_spec
 
 
 if __name__ == "__main__":
-    case_data = main(parse_args())
+    all_case_data, _, _ = main(parse_args())
