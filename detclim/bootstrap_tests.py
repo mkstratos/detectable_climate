@@ -1,5 +1,5 @@
-"""Perform many K-S tests comparing two E3SM ensembles.
-"""
+"""Perform many K-S tests comparing two E3SM ensembles."""
+
 import argparse
 import json
 import random
@@ -13,6 +13,7 @@ import numpy as np
 import scipy.stats as sts
 import xarray as xr
 from dask.distributed import Client
+from dask_jobqueue.slurm import SLURMCluster
 
 import detclim
 
@@ -65,6 +66,19 @@ def ks_all_times(data_1, data_2):
     ks_test = np.vectorize(sts.mstats.ks_2samp, signature="(n),(n)->(),()")
     ks_stat, ks_pval = ks_test(data_1.T, data_2.T)
     return da.array(ks_stat), da.array(ks_pval)  # type: ignore
+
+
+def cvm_2samp(data_x, data_y):
+    """Perform a 2 sample Cramer von Mises test, map output to a tuple."""
+    _res = sts.cramervonmises_2samp(data_x, data_y)
+    return _res.statistic, _res.pvalue
+
+
+def cvm_all_times(data_1, data_2):
+    """Perform a 2 sample Cramer von Mises test on all times."""
+    cvm_test_vec = np.vectorize(cvm_2samp, signature="(n),(n)->(),()")
+    cvm_stat, cvm_pval = cvm_test_vec(data_1.T, data_2.T)
+    return da.array(cvm_stat), da.array(cvm_pval)  # type: ignore
 
 
 def randomise_sample(ens_data, case_abbr, ens_size=30, niter=1):
@@ -291,8 +305,15 @@ def ks_bootstrap_serial(ens_data, case_abbr, data_vars, permute):
     return np.array(ks_stat_i), np.array(ks_pval_i)
 
 
-def ks_bootstrap(
-    ens_data, case_abbr, dask_client, n_iter=5, test_size=30, permute=False
+def test_bootstrap(
+    ens_data,
+    case_abbr,
+    dask_client,
+    stat_test=ks_all_times,
+    n_iter=5,
+    test_size=30,
+    permute=False,
+    random_index=None,
 ):
     """Perform multiple K-S tests on selected variables in two ensembles.
 
@@ -313,7 +334,7 @@ def ks_bootstrap(
 
     Returns
     -------
-    ks_stat, ks_pval : `dask.array`
+    test_stat, test_pval : `dask.array`
         Dask arrays for the K-S test statistic and p-value
     idx_0, idx_1 : array_like
         Array of shape [`n_iter`, `test_size`] of ensemble indicies used for each
@@ -325,13 +346,16 @@ def ks_bootstrap(
         data_vars = sorted(json.load(_vf_in)["default"])
     vars_out = []
 
-    if not permute:
-        # Get random sample, outputs a
-        # dict: {case_a: [i1, i2, ...], case_b: [i1, i2, ...]}
-        random_index, _ = randomise_sample(ens_data, case_abbr, test_size, niter=n_iter)
-        print(f"RANDOM INDEX SIZE: {np.array(random_index).shape}")
-    else:
-        raise NotImplementedError("Random index permutation not yet implemented")
+    if random_index is None:
+        if not permute:
+            # Get random sample, outputs a
+            # dict: {case_a: [i1, i2, ...], case_b: [i1, i2, ...]}
+            random_index, _ = randomise_sample(
+                ens_data, case_abbr, test_size, niter=n_iter
+            )
+            print(f"RANDOM INDEX SIZE: {np.array(random_index).shape}")
+        else:
+            raise NotImplementedError("Random index permutation not yet implemented")
 
     for rse in range(n_iter):
         var_futures = []
@@ -341,7 +365,7 @@ def ks_bootstrap(
         for test_var in data_vars:
             if test_var in data_0.data_vars and test_var in data_1.data_vars:
                 var_futures.append(
-                    dask_client.submit(ks_all_times, data_0[test_var], data_1[test_var])
+                    dask_client.submit(stat_test, data_0[test_var], data_1[test_var])
                 )
                 # Keep a list of all the variables tested, but only one copy
                 if test_var not in vars_out:
@@ -349,53 +373,67 @@ def ks_bootstrap(
         futures.append(var_futures)
 
     results = da.array(dask.compute(*dask_client.gather(futures)))  # type: ignore
-    ks_stat = results[..., 0, :]
-    ks_pval = results[..., 1, :]
+    test_stat = results[..., 0, :]
+    test_pval = results[..., 1, :]
 
-    return ks_stat, ks_pval, np.array(random_index), vars_out
+    return test_stat, test_pval, np.array(random_index), vars_out
 
 
-def output_data(ks_stat, ks_pval, rnd_idx, times, data_vars):
-    """_summary_
+def output_data(stats, pvals, rnd_idx, times, data_vars, test_names):
+    """
+    Save statstical test data to a netCDF file.
 
     Parameters
     ----------
-    ks_stat : _type_
-        _description_
-    ks_pval : _type_
-        _description_
-    ens_data : _type_
-        _description_
+    stats : list(array_like)
+        List of arrays containing test statstics from statstical tests
+    pvals : list(array_like)
+        List of arrays containing p-values from statstical tests
+    rnd_idx : array_like
+        Array of ensemble indicies used to generated bootstrap iterations for `stats` and `pvals`
+    times : array_like
+        Array of times matching model output
+    data_vars : array_like
+        Names of model output variables
+    test_names : list
+        Names of statstical tests used to generate `stats` and `pvals` in the same order
+
     """
 
     out_coords = {
-        "iter": np.arange(ks_stat.shape[0]),
+        "iter": np.arange(stats[0].shape[0]),
         "vars": data_vars,
         "time": times,
     }
     out_dims = ("iter", "vars", "time")
-    ks_stat_xr = xr.DataArray(
-        np.array(ks_stat),
-        coords=out_coords,
-        dims=out_dims,
-        attrs={
-            "units": "",
-            "desc": "2-sample K-S test statistic",
-            "long_name": "kolmogorov_smirnov_test_statistic",
-            "short_name": "ks_pval",
-        },
-    )
-    ks_pval_xr = xr.DataArray(
-        np.array(ks_pval),
-        coords=out_coords,
-        dims=out_dims,
-        attrs={
-            "units": "",
-            "desc": "2-sample K-S test P-value",
-            "long_name": "kolmogorov_smirnov_test_p_value",
-            "short_name": "ks_stat",
-        },
-    )
+    out_darrays = {}
+
+    for idx, test_name in enumerate(test_names):
+        _stat_xr = xr.DataArray(
+            np.array(stats[idx]),
+            coords=out_coords,
+            dims=out_dims,
+            attrs={
+                "units": "",
+                "desc": f"2-sample {test_name} test statistic",
+                "long_name": f"{test_name}_test_statistic",
+                "short_name": f"{test_name}_stat",
+            },
+        )
+        _pval_xr = xr.DataArray(
+            np.array(pvals[idx]),
+            coords=out_coords,
+            dims=out_dims,
+            attrs={
+                "units": "",
+                "desc": f"2-sample {test_name} test P-value",
+                "long_name": f"{test_name}_test_p_value",
+                "short_name": f"{test_name}_pval",
+            },
+        )
+        out_darrays[f"{test_name}_stat"] = _stat_xr
+        out_darrays[f"{test_name}_pval"] = _pval_xr
+
     rnd_idx = xr.DataArray(
         rnd_idx,
         coords={
@@ -408,7 +446,8 @@ def output_data(ks_stat, ks_pval, rnd_idx, times, data_vars):
             "desc": "Index of ensemble members for each case and iteration",
         },
     )
-    return xr.Dataset({"stat": ks_stat_xr, "pval": ks_pval_xr, "rnd_idx": rnd_idx})
+    out_darrays["rnd_idx"] = rnd_idx
+    return xr.Dataset(out_darrays)
 
 
 def load_data(case_dirs, run_len, case_abbr, cases):
@@ -447,6 +486,7 @@ def load_data(case_dirs, run_len, case_abbr, cases):
             ens_data[_case].append(
                 xr.open_dataset(
                     _file,
+                    chunks=-1,
                 )
             )
         ens_data[_case] = xr.concat(ens_data[_case], dim="ens")
@@ -473,7 +513,6 @@ def rolling_mean_data(ens_data, cases, period_len=12, time_var="time"):
     select = {time_var: period_len}
     for _case in cases:
         for _var in ens_data[_case].data_vars:
-
             try:
                 rolling_means[_case][_var] = (
                     ens_data[_case][_var].rolling(**select).mean().dropna(time_var)
@@ -531,25 +570,54 @@ def main(
         ens_data = rolling_mean_data(ens_data, [case_a, case_b], period_len=rolling)
     print("LAUNCH CLIENT")
     # client = Client(n_workers=n_iter // 1.1)
-    _workers = 36 * nnodes
+    # _workers = 36 * nnodes
+    # _workers = 64
+
     # with Client(n_workers=_workers, processes=True, interface="lo") as client:
+    cluster = SLURMCluster(
+        queue="debug",
+        account="e3sm",
+        cores=128,
+        memory="250GB",
+    )
+    print("SCALE CLUSTER")
+    cluster.scale(jobs=nnodes)
+    print(cluster)
+
     with Client(
-        n_workers=_workers, threads_per_worker=1, processes=True, interface="ib0"
+        cluster,
+        # n_workers=_workers, threads_per_worker=1, processes=True, interface="ib0"
     ) as client:
         print(client)
         print(f"PERFORM {n_iter} TESTS")
-        ks_stat, ks_pval, rnd_indx, test_vars = ks_bootstrap(
+        ks_stat, ks_pval, rnd_indx, test_vars = test_bootstrap(
             ens_data,
             [case_a, case_b],
             client,
+            stat_test=ks_all_times,
             n_iter=n_iter,
             permute=permute,
             test_size=test_size,
         )
         time.sleep(1)
+        cvm_stat, cvm_pval, rnd_indx, test_vars = test_bootstrap(
+            ens_data,
+            [case_a, case_b],
+            client,
+            stat_test=ks_all_times,
+            n_iter=n_iter,
+            permute=permute,
+            test_size=test_size,
+            random_index=rnd_indx.tolist(),
+        )
         print("OUTPUT TO FILE")
         ds_out = output_data(
-            ks_stat, ks_pval, rnd_indx, ens_data[case_a]["time"], test_vars
+            stats=[ks_stat, cvm_stat],
+            pvals=[ks_pval, cvm_pval],
+            rnd_idx=rnd_indx,
+            times=ens_data[case_a]["time"],
+            data_vars=test_vars,
+            test_names=["ks", "cvm"],
         )
         if rolling == 0:
             run_shape = run_len
