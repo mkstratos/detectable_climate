@@ -2,18 +2,19 @@
 # -*- coding: utf-8 -*-
 """Perform bootstrapping of different statstical tests for E3SM simulation ensembles."""
 
-import xarray as xr
 import argparse
-import matplotlib.pyplot as plt
+import json
+import multiprocessing as mp
+import random
+import time
+from functools import partial
 from pathlib import Path
+
 import numpy as np
 import scipy.stats as sts
-import json
-import random
-from functools import partial
-import multiprocessing as mp
+import xarray as xr
+
 import detclim
-import time
 
 
 def randomise_new(ens_min, ens_max, ens_size, with_repl=False, ncases=2, uniq=False):
@@ -64,14 +65,13 @@ def load_data(case_dirs, run_len, case_abbr, cases):
 
     """
     files = {
-        _case: sorted(case_dirs[_case].glob(f"{cases[run_len][_case]}.eam*aavg.nc"))
+        # _case: sorted(case_dirs[_case].glob(f"{cases[run_len][_case]}.eam*aavg.nc"))
+        _case: Path(case_dirs[_case], f"{cases[run_len][_case]}.eam.h0.aavg.nc")
         for _case in case_abbr
     }
     ens_data = []
     for _case in case_abbr:
-        ens_data.append(
-            xr.open_mfdataset(files[_case], combine="nested", concat_dim="ens").load()
-        )
+        ens_data.append(xr.open_dataset(files[_case]).load())
     ens_data = xr.concat(ens_data, dim="exp")
     ens_data["exp"] = case_abbr
 
