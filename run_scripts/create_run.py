@@ -21,7 +21,7 @@ def set_tasks(ninst, case_dir):
         if ntasks == 1:
             os.system(f"./xmlchange NTASKS_{comp}={ntasks * ninst}")
         else:
-            os.system(f"./xmlchange NTASKS_{comp}={ntasks * ninst / 3}")
+            os.system(f"./xmlchange NTASKS_{comp}={ntasks * ninst // 3}")
 
         if comp != "CPL":
             os.system(f"./xmlchange NINST_{comp}={ninst}")
@@ -60,7 +60,7 @@ def main(build_case=False, run_case=False):
     # Surround variable names in single quotes (e.g. T -> 'T')
     output_vars = [f"'{_var}'" for _var in output_vars["default"]]
 
-    ninst = 120
+    ninst = 30
     compset = "F2010"
     grid = "ne4_oQU240"
     mach = "chrysalis"
@@ -68,8 +68,8 @@ def main(build_case=False, run_case=False):
     nhtfrq = None
     compiler = "intel"
     today = dt.datetime.now().strftime("%Y%m%d")
-    # branch = "maint-2.0"
-    branch = "master"
+    branch = "maint-2.0"
+    # branch = "master"
     plim = 1e-10
 
     # zmconv_c0 = 0.0022
@@ -97,7 +97,7 @@ def main(build_case=False, run_case=False):
         str(Path(cime_scripts_dir, "create_newcase")),
         f"--compset {compset}",
         f"--res {grid}",
-        "--walltime 03:00:00",
+        "--walltime 02:00:00",
         f"--case {case}",
         f"--machine {mach}",
         f"--ninst {ninst}",
@@ -141,7 +141,7 @@ def main(build_case=False, run_case=False):
             nl_atm_file.write("new_random = .true.\n")
             nl_atm_file.write(f"pertlim = {plim}\n")
             nl_atm_file.write("seed_custom = {}\n".format(iinst))
-            nl_atm_file.write("seed_clock = .false.\n")
+            nl_atm_file.write("seed_clock = .true.\n")
 
             if nhtfrq is not None:
                 nl_atm_file.write(f"nhtfrq = {nhtfrq}\n")
@@ -190,4 +190,4 @@ def main(build_case=False, run_case=False):
 
 
 if __name__ == "__main__":
-    main(True, True)
+    main(True, False)

@@ -1,5 +1,5 @@
-"""Plot the results of bootstrapping tests.
-"""
+"""Plot the results of bootstrapping tests."""
+
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -30,6 +30,15 @@ def fmt_case(case):
     elif "new" in case:
         num = float(case.replace("new-", "").replace("pct", "").replace("p", "."))
         _out = f"new {num:.1f}%"
+    elif "c0" in case:
+        num = float(
+            case.split("-")[1]
+            .replace("pct", "")
+            .replace("p", ".")
+            .replace("-2mo", "")
+            .replace("_ts40", "")
+        )
+        _out = f"zmconv_c0_ocn {num:.1f}%"
     elif "c1" in case:
         num = float(
             case.split("-")[1]
