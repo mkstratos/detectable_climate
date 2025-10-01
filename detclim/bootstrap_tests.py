@@ -1,453 +1,42 @@
-"""Perform many K-S tests comparing two E3SM ensembles."""
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""Perform bootstrapping of different statstical tests for E3SM simulation ensembles."""
 
+import xarray as xr
 import argparse
-import json
-import random
-import time
-from pathlib import Path
-
-import dask
-import dask.array as da
 import matplotlib.pyplot as plt
+from pathlib import Path
 import numpy as np
 import scipy.stats as sts
-import xarray as xr
-from dask.distributed import Client
-from dask_jobqueue.slurm import SLURMCluster
-
+import json
+import random
+from functools import partial
+import multiprocessing as mp
 import detclim
-
-plt.style.use("ggplot")
-
-
-REJECT_THR = 0.05
+import time
 
 
-def ks_all_times_nv(data_1, data_2):
-    """Perform K-S test on two arrays across all times in the array.
-
-    Parameters
-    ----------
-    data_1, data_2 : array_like
-        Arrays of data for testing, dimension 2 (typically [ensemble, time]), with time
-        dimension as the rightmost dimension.
-
-    Returns
-    -------
-    ks_test_output : `da.array`
-        Dask array with shape [data_n.shape[1], 2] of 2 sample K-S test
-        results (statstic, p-value)
-
-    """
-    return da.array(  # type: ignore
-        [
-            sts.ks_2samp(data_1[:, _tix], data_2[:, _tix], method="asymp")
-            for _tix in range(data_1.shape[1])
+def randomise_new(ens_min, ens_max, ens_size, with_repl=False, ncases=2, uniq=False):
+    ens_idx = sorted(range(ens_min, ens_max + 1))
+    assert len(ens_idx) > ens_size, "ENSEMBLE SIZE MUST BE SMALLER THAN ENSEMBLE RANGE"
+    if not with_repl and not uniq:
+        selected = [random.sample(ens_idx, ens_size) for _ in range(ncases)]
+    elif not with_repl:
+        _sel = random.sample(ens_idx, ens_size * ncases)
+        selected = [
+            _sel[idx * ens_size : (idx + 1) * ens_size] for idx in range(ncases)
         ]
-    )
-
-
-def ks_all_times(data_1, data_2):
-    """Perform K-S test on two arrays across all times in the array.
-
-    Parameters
-    ----------
-    data_1, data_2 : array_like
-        Arrays of data for testing, dimension 2 (typically [ensemble, time]), with time
-        dimension as the rightmost dimension.
-
-    Returns
-    -------
-    ks_test_output : `da.array`
-        Dask array with shape [data_n.shape[1], 2] of 2 sample K-S test
-        results (statstic, p-value)
-
-    """
-    ks_test = np.vectorize(sts.mstats.ks_2samp, signature="(n),(n)->(),()")
-    ks_stat, ks_pval = ks_test(data_1.T, data_2.T)
-    return da.array(ks_stat), da.array(ks_pval)  # type: ignore
-
-
-def cvm_2samp(data_x, data_y):
-    """Perform a 2 sample Cramer von Mises test, map output to a tuple."""
-    _res = sts.cramervonmises_2samp(data_x, data_y)
-    return _res.statistic, _res.pvalue
-
-
-def cvm_all_times(data_1, data_2):
-    """Perform a 2 sample Cramer von Mises test on all times."""
-    cvm_test_vec = np.vectorize(cvm_2samp, signature="(n),(n)->(),()")
-    cvm_stat, cvm_pval = cvm_test_vec(data_1.T, data_2.T)
-    return da.array(cvm_stat), da.array(cvm_pval)  # type: ignore
-
-
-def randomise_sample(ens_data, case_abbr, ens_size=30, niter=1):
-    """Generate a random sample of ensemble members.
-
-    Parameters
-    ----------
-    ens_data : dict
-        Dict of xarray.Dataset
-    case_abbr : list
-        Case name abbreviations used to select cases from `ens_data`
-    ens_size : int
-        Size of ensemble sample, default=30
-    niter : int
-        Number of iterations for bootstraping. Default=1
-
-    Returns
-    -------
-    selected, left_out : dict
-        Indicies of selected and left-out ensemble members for each case in `case_abbr`
-
-    """
-    assert all(_abbr in ens_data for _abbr in case_abbr), "All cases not in ens_data"
-
-    # Check that both input ensembles are the same size, if they are, then the sample
-    # should not repeat between the two (in case of control run, there's no duplication)
-    if (
-        not set(ens_data[case_abbr[0]].ens.values).difference(
-            ens_data[case_abbr[1]].ens.values
-        )
-        and ens_size <= ens_data[case_abbr[0]].ens.values.shape[0] // 2
-    ):
-        # selected = {_case: [] for _case in case_abbr}
-        selected_0 = []
-        selected_1 = []
-        for _itr in range(niter):
-            # Generate one sample, so there is no replacement between the two ensembles
-            # Since they're the same, then just use the values from case_abbr[0]
-            sample = random.sample(
-                list(ens_data[case_abbr[0]].ens.values), ens_size * 2
-            )
-            # First half of the sample is for first case
-            selected_0.append(sample[:ens_size])
-            # Second half of the sample is for second case
-            selected_1.append(sample[ens_size:])
-        selected = [selected_0, selected_1]
     else:
         selected = [
-            [
-                random.sample(list(ens_data[_case].ens.values), ens_size)
-                for _ in range(niter)
-            ]
-            for _case in case_abbr
+            [random.randint(ens_min, ens_max) for _ in range(ens_size)]
+            for _ in range(ncases)
         ]
-
-    left_out = [[] for _case in case_abbr]
-    for _cix, _case in enumerate(case_abbr):
-        case_ens = set(ens_data[_case].ens.values)
-        # shuf_ens = [set(selected[_case][idx]) for idx in range(niter)]
-
-        for idx in range(niter):
-            shuf_ens = set(selected[_cix][idx])
-
-            if len(case_ens) >= len(shuf_ens):
-                avail = list(case_ens.difference(shuf_ens))
-            else:
-                avail = list(shuf_ens.difference(case_ens))
-
-            left_out[_cix].append(random.sample(avail, 1)[0])
-
-    if niter == 1:
-        selected = [selected[_cix][0] for _cix, _ in enumerate(case_abbr)]
-        left_out = [left_out[_cix][0] for _cix, _ in enumerate(case_abbr)]
-
-    return selected, left_out
+    return selected
 
 
-def plot_single_var_summary(ens_data, case_abbr, test_var="T", group_mean=False):
-    """Create an example plot illustrating the testing process for a single variable.
-
-    Parameters
-    ----------
-    ens_data : dict
-        Dictionary of `xarray.Dataset`s
-    case_abbr : list or tuple
-        Length two list or tuple of cases in `ens_data` to compare
-    test_var : str, optional
-        Variable to plot, by default "T"
-    group_mean : bool, l
-        Plot against overall ensemble mean rather than a left-out member, default False
-
-    """
-    # (ens_data - ens_data.mean(dim="ens"))["U"].plot.line(x="time")
-    ens_shuffle, ens_loo = randomise_sample(ens_data, case_abbr)
-
-    data_a = ens_data[case_abbr[0]][test_var].isel(ens=ens_shuffle[0])
-    data_b = ens_data[case_abbr[1]][test_var].isel(ens=ens_shuffle[1])
-    # times = ens_data[case_abbr[0]].time.values
-    times = np.arange(data_a.time.shape[0])
-
-    _, axes = plt.subplots(2, 2, figsize=(10, 8))
-
-    if group_mean:
-        # Plot against mean for group
-        axes[0, 0].plot(
-            times, (data_a - data_a.mean(dim="ens")).T, color="C0", label=case_abbr[0]
-        )
-        axes[0, 0].plot(
-            times, (data_b - data_b.mean(dim="ens")).T, color="C1", label=case_abbr[1]
-        )
-    else:
-        # Plot against leave-one-out for each case (if n_test < (n_ens-1) then
-        # it's the first one left out)
-        axes[0, 0].plot(
-            times,
-            (data_a - ens_data[case_abbr[0]][test_var].isel(ens=ens_loo[0])).values.T,
-            label=case_abbr[0],
-            color="C0",
-        )
-        axes[0, 0].plot(
-            times,
-            (data_b - ens_data[case_abbr[1]][test_var].isel(ens=ens_loo[1])).values.T,
-            label=case_abbr[0],
-            color="C1",
-        )
-
-    axes[0, 0].set_title(f"{test_var} ensemble spread")
-    axes[0, 0].set_xlabel("Time step")
-
-    (aline,) = axes[0, 1].plot(times, data_a.mean(dim="ens"), label=case_abbr[0])
-    (bline,) = axes[0, 1].plot(times, data_b.mean(dim="ens"), label=case_abbr[1])
-
-    ax_diff = axes[0, 1].twinx()
-    (diffline,) = ax_diff.plot(
-        times,
-        (data_a.mean(dim="ens") - data_b.mean(dim="ens")).pipe(np.abs),
-        label="Difference",
-        color="grey",
-    )
-    ax_diff.set_ylabel(f"{test_var} difference")
-    axes[0, 1].legend(handles=[aline, bline, diffline])
-    axes[0, 1].set_title(f"{test_var} mean")
-
-    axes[1, 0].plot(times, data_a.std(dim="ens"), label=case_abbr[0])
-    axes[1, 0].plot(times, data_b.std(dim="ens"), label=case_abbr[1])
-    axes[1, 0].set_title(f"{test_var} std dev")
-
-    ks_stat, ks_pval = ks_all_times(data_a, data_b)
-
-    ax_pval = axes[1, 1].twinx()
-
-    (ks_line,) = axes[1, 1].plot(times, ks_stat, label="Statistic", lw=1)
-    (pv_line,) = ax_pval.plot(times, ks_pval, color="C1", label="P-value", lw=1)
-    _ = ax_pval.plot(
-        times[ks_pval < REJECT_THR], ks_pval[ks_pval < REJECT_THR], "C1o", ms=2
-    )
-    axes[1, 1].set_ylim([0, 1.0])
-
-    ax_pval.axhline(REJECT_THR, color="C1", ls="--", alpha=0.5)
-
-    axes[1, 1].set_title(f"{test_var} K-S Test")
-    axes[1, 1].legend(handles=[ks_line, pv_line])
-    axes[1, 1].set_ylabel("Test statistic", color=ks_line.get_color())
-    ax_pval.set_ylabel("Test p-value", color=pv_line.get_color())
-    for _ax in axes.flatten():
-        _ax.grid(visible=True)
-    plt.tight_layout()
-    plt.savefig(f"plt_{test_var}_{case_abbr[0]}x{case_abbr[1]}_compare.png")
-
-
-def check_ensemble_vars(ens_data, common_vars, case):
-    """Check all common_vars to make sure they're not constant across the ensemble."""
-    const_vars = []
-    for _var in common_vars:
-        ens_std = ens_data[case][_var].mean(dim="time").std(dim="ens").values
-        if ens_std == 0.0:
-            const_vars.append(_var)
-    return const_vars
-
-
-def ks_bootstrap_serial(ens_data, case_abbr, data_vars, permute):
-    """Perform multiple K-S tests on ensemble data.
-
-    Parameters
-    ----------
-    ens_data : dict
-        Dict of `xarray.Dataset`s of ensemble data
-    case_abbr : list, tuple
-        Length two list or tuple of cases in `ens_data` to compare
-    data_vars : list
-        List of data variables on which to perform the test
-    permute : logical
-        Use permutation to create control ensemble
-
-    Returns
-    -------
-    ks_stat, ks_pval : array_like
-        Arrays of K-S test statistic and p-value for each bootstrap iteration.
-
-    """
-    ens_shuffle, _ = randomise_sample(ens_data, case_abbr, ens_size=30, niter=1)
-    # ens_shuffle = {
-    # _case: random.sample(list(ens_data[_case].ens.values), 30) for _case in case_abbr
-    # }
-    # _ = {
-    #     _case: list(
-    #         set(ens_data[_case].ens.values).difference(ens_shuffle[_case])
-    #     )  # [0]
-    #     for _case in case_abbr
-    # }
-    # print(ens_loo)
-    ks_stat_i = []
-    ks_pval_i = []
-
-    for test_var in data_vars:
-        data_a = ens_data[case_abbr[0]][test_var].isel(ens=ens_shuffle[0])
-        data_b = ens_data[case_abbr[1]][test_var].isel(ens=ens_shuffle[1])
-
-        if hasattr(data_a, "time"):
-            _stat, _pval = ks_all_times(data_a.data, data_b.data)
-            ks_stat_i.append(_stat)
-            ks_pval_i.append(_pval)
-
-    return np.array(ks_stat_i), np.array(ks_pval_i)
-
-
-def test_bootstrap(
-    ens_data,
-    case_abbr,
-    dask_client,
-    stat_test=ks_all_times,
-    n_iter=5,
-    test_size=30,
-    permute=False,
-    random_index=None,
-):
-    """Perform multiple K-S tests on selected variables in two ensembles.
-
-    Parameters
-    ----------
-    ens_data : dict
-        Dict of `xarray.Dataset`s of ensemble data
-    case_abbr : list, tuple
-        Length two list or tuple of cases in `ens_data` to compare
-    dask_client : `dask.distributed.Client`
-        Dask client on which to submit
-    n_iter : int, optional
-        Number of boostrap tests to perform, by default 5
-    test_size : int, optional
-        Number of ensemble members for each K-S test, by default 30
-    permute : logical
-        Use permutation to create control ensemble
-
-    Returns
-    -------
-    test_stat, test_pval : `dask.array`
-        Dask arrays for the K-S test statistic and p-value
-    idx_0, idx_1 : array_like
-        Array of shape [`n_iter`, `test_size`] of ensemble indicies used for each
-        bootstrap iteration
-
-    """
-    futures = []
-    with open("new_vars.json", "r", encoding="utf-8") as _vf_in:
-        data_vars = sorted(json.load(_vf_in)["default"])
-    vars_out = []
-
-    if random_index is None:
-        if not permute:
-            # Get random sample, outputs a
-            # dict: {case_a: [i1, i2, ...], case_b: [i1, i2, ...]}
-            random_index, _ = randomise_sample(
-                ens_data, case_abbr, test_size, niter=n_iter
-            )
-            print(f"RANDOM INDEX SIZE: {np.array(random_index).shape}")
-        else:
-            raise NotImplementedError("Random index permutation not yet implemented")
-
-    for rse in range(n_iter):
-        var_futures = []
-        data_0 = ens_data[case_abbr[0]].isel(**{"ens": random_index[0][rse]})
-        data_1 = ens_data[case_abbr[1]].isel(**{"ens": random_index[1][rse]})
-
-        for test_var in data_vars:
-            if test_var in data_0.data_vars and test_var in data_1.data_vars:
-                var_futures.append(
-                    dask_client.submit(stat_test, data_0[test_var], data_1[test_var])
-                )
-                # Keep a list of all the variables tested, but only one copy
-                if test_var not in vars_out:
-                    vars_out.append(test_var)
-        futures.append(var_futures)
-
-    results = da.array(dask.compute(*dask_client.gather(futures)))  # type: ignore
-    test_stat = results[..., 0, :]
-    test_pval = results[..., 1, :]
-
-    return test_stat, test_pval, np.array(random_index), vars_out
-
-
-def output_data(stats, pvals, rnd_idx, times, data_vars, test_names):
-    """
-    Save statstical test data to a netCDF file.
-
-    Parameters
-    ----------
-    stats : list(array_like)
-        List of arrays containing test statstics from statstical tests
-    pvals : list(array_like)
-        List of arrays containing p-values from statstical tests
-    rnd_idx : array_like
-        Array of ensemble indicies used to generated bootstrap iterations for `stats` and `pvals`
-    times : array_like
-        Array of times matching model output
-    data_vars : array_like
-        Names of model output variables
-    test_names : list
-        Names of statstical tests used to generate `stats` and `pvals` in the same order
-
-    """
-
-    out_coords = {
-        "iter": np.arange(stats[0].shape[0]),
-        "vars": data_vars,
-        "time": times,
-    }
-    out_dims = ("iter", "vars", "time")
-    out_darrays = {}
-
-    for idx, test_name in enumerate(test_names):
-        _stat_xr = xr.DataArray(
-            np.array(stats[idx]),
-            coords=out_coords,
-            dims=out_dims,
-            attrs={
-                "units": "",
-                "desc": f"2-sample {test_name} test statistic",
-                "long_name": f"{test_name}_test_statistic",
-                "short_name": f"{test_name}_stat",
-            },
-        )
-        _pval_xr = xr.DataArray(
-            np.array(pvals[idx]),
-            coords=out_coords,
-            dims=out_dims,
-            attrs={
-                "units": "",
-                "desc": f"2-sample {test_name} test P-value",
-                "long_name": f"{test_name}_test_p_value",
-                "short_name": f"{test_name}_pval",
-            },
-        )
-        out_darrays[f"{test_name}_stat"] = _stat_xr
-        out_darrays[f"{test_name}_pval"] = _pval_xr
-
-    rnd_idx = xr.DataArray(
-        rnd_idx,
-        coords={
-            "case": [0, 1],
-            "iter": out_coords["iter"],
-            "index": np.arange(rnd_idx.shape[-1]),
-        },
-        attrs={
-            "units": "",
-            "desc": "Index of ensemble members for each case and iteration",
-        },
-    )
-    out_darrays["rnd_idx"] = rnd_idx
-    return xr.Dataset(out_darrays)
+def rolling_mean_data(data, period_len=12, time_var="time"):
+    select = {time_var: period_len}
+    return data.rolling(**select).mean().dropna(time_var)
 
 
 def load_data(case_dirs, run_len, case_abbr, cases):
@@ -478,53 +67,138 @@ def load_data(case_dirs, run_len, case_abbr, cases):
         _case: sorted(case_dirs[_case].glob(f"{cases[run_len][_case]}.eam*aavg.nc"))
         for _case in case_abbr
     }
-
-    ens_data = {}
+    ens_data = []
     for _case in case_abbr:
-        ens_data[_case] = []
-        for _file in files[_case]:
-            ens_data[_case].append(
-                xr.open_dataset(
-                    _file,
-                    chunks=-1,
-                )
-            )
-        ens_data[_case] = xr.concat(ens_data[_case], dim="ens")
+        ens_data.append(
+            xr.open_mfdataset(files[_case], combine="nested", concat_dim="ens").load()
+        )
+    ens_data = xr.concat(ens_data, dim="exp")
+    ens_data["exp"] = case_abbr
 
     return ens_data
 
 
-def rolling_mean_data(ens_data, cases, period_len=12, time_var="time"):
-    """
-    Take rolling mean of an xarray Dataset.
+def ks_pval(data_x, data_y):
+    _res = sts.mstats.ks_2samp(data_x, data_y)
+    return _res[1]
+
+
+def cvm_2samp(data_x, data_y):
+    """Perform a 2 sample Cramer von Mises test, map output to a tuple."""
+    _res = sts.cramervonmises_2samp(data_x, data_y)
+    return _res.pvalue
+
+
+def mannwhitney(data_1, data_2):
+    """Perform a Wiloxon-Mann-Whitney U Test, return P-value."""
+    return sts.mannwhitneyu(data_1, data_2, axis=1).pvalue
+
+
+def epps_singleton(data_1, data_2):
+    """Perform a 2 sample Epps Singleton test, return P-value."""
+    try:
+        _out = sts.epps_singleton_2samp(data_1, data_2, axis=1).pvalue
+    except np.linalg.LinAlgError:
+        _out = np.ones(data_1.shape[0])
+    return _out
+
+
+def anderson_pval(data_1, data_2):
+    try:
+        _res = sts.anderson_ksamp(
+            [data_1, data_2], method=sts.PermutationMethod(n_resamples=500)
+        )
+    except ValueError:
+        return 1.0
+    return _res.pvalue  # pyright: ignore[reportAttributeAccessIssue]
+
+
+def test_all_times(data, ens_ids, test_fcn):
+    """Perform statistical test on two arrays across all times in the array.
 
     Parameters
     ----------
-    ens_data : dict
-        Dictionary mapping case names to `xarray.Datasets` for base / test cases
-    cases : list, tuple
-        Abbreviations for case names in `ens_data`
-    period_len : int
-        Number of time periods used in averaging (same units as the `time_var`)
-    time_var : str
+    data_1, data_2 : array_like
+        Arrays of data for testing, dimension 2 (typically [ensemble, time]),
+        with time dimension as the rightmost dimension.
+
+    Returns
+    -------
+    test_output : `xarray.DataArray`
+        Array with shape [data_n.shape[1]] of 2 sample statistical test p-value
 
     """
-    rolling_means = {_case: {} for _case in cases}
-    select = {time_var: period_len}
-    for _case in cases:
-        for _var in ens_data[_case].data_vars:
-            try:
-                rolling_means[_case][_var] = (
-                    ens_data[_case][_var].rolling(**select).mean().dropna(time_var)
-                )
-            except TypeError:
-                # Happens for things like "time" variable which can be a cftime.datetime
-                continue
-            except KeyError:
-                # Happens for coordinate variables
-                continue
+    data_1 = data.isel(exp=0, ens=ens_ids[0])
+    data_2 = data.isel(exp=1, ens=ens_ids[1])
+    _pval = test_fcn(data_1.T, data_2.T)
+    try:
+        _out = xr.DataArray(data=_pval, dims=("time",), coords={"time": data.time})
+    except ValueError as _err:
+        print(_err)
+        return None
 
-    return {_case: xr.Dataset(rolling_means[_case]) for _case in cases}
+    return _out
+
+
+def bootstrap_test(ens_ids, data, test_fcn):
+    return data.apply(test_all_times, ens_ids=ens_ids, test_fcn=test_fcn)
+
+
+def convert_to_array(pvals_in):
+    """Convert pvals DataSet to an array of shape [n_iter, n_vars, n_times]
+
+    Parameters
+    ----------
+        pvals_in : xarray.Dataset
+            pvalues for each output field at each bootstrap iteration and time
+
+    Returns
+    -------
+        pvals : numpy.ndarray
+            pvalues array with shape [N output field, N bootstrap iteration, N times]
+
+    """
+    pvals_out = pvals_in.to_array().values
+    return np.swapaxes(pvals_out, 0, 1)
+
+
+def pvals_to_dataarray(pvals, test_id):
+    """Convert array of p-values from a statstical test to an xarray.DataArray for output
+
+    Parameters
+    ----------
+        pvals : array_like
+            Array of p-values from the test of shape [n iter, n vars, n times]
+        data_vars : list
+            List of data variables of shape [n vars]
+        times : xarray.DataArray
+            Time array
+        test_name : str
+            Name of the statistical test
+
+    Returns
+    -------
+        xarray.DataArray : DataArray with coordinates and metadata assigned
+
+    """
+    _pvals = convert_to_array(pvals)
+    test_name, test_desc = test_id
+    out_coords = {
+        "iter": np.arange(_pvals.shape[0]),
+        "vars": pvals.data_vars,
+        "time": pvals.time,
+    }
+    return xr.DataArray(
+        data=_pvals,
+        coords=out_coords,
+        dims=("iter", "vars", "time"),
+        attrs={
+            "units": "",
+            "desc": f"2-sample {test_desc} p-value",
+            "long_name": f"{test_desc.lower().replace(' ', '_')}_pvalue",
+            "short_name": f"{test_name}_pvalue",
+        },
+    )
 
 
 def main(
@@ -536,25 +210,9 @@ def main(
     rolling=0,
     permute=False,
     test_size=30,
+    ctl_run=False,
 ):
-    """Perform bootstrap K-S testing of two ensembles of E3SM
-
-    Parameters
-    ----------
-    case_a : str, optional
-        Base case name, by default "ctl"
-    case_b : str, optional
-        Test case name, by default "5pct"
-    run_len : str, optional
-        Case run length (defauylt 1year)
-    n_iter : int, optional
-        Number of bootstrap iterations to perform, default 5
-    permute : logical, optional
-        Use permutation for control ensemble, default False
-    test_size: int
-        Number of ensemble members per test, default 30
-
-    """
+    _total_time_s = time.perf_counter()
     with open(Path(detclim.data_path, "case_db.json"), "r", encoding="utf-8") as _cdb:
         cases = json.loads(_cdb.read())
 
@@ -563,76 +221,88 @@ def main(
         _case: Path(scratch, cases[run_len][_case], "run") for _case in [case_a, case_b]
     }
 
-    print("LOAD DATA")
-    # plot_single_var_summary(ens_data, case_abbr, test_var="T")
+    print(f"LOAD DATA for {case_a} x {case_b}")
+    _timers = time.perf_counter()
+    dvars = json.loads(open("new_vars.json", "r", encoding="utf-8").read())["default"]
     ens_data = load_data(case_dirs, run_len, [case_a, case_b], cases)
+    print(f"       IN {time.perf_counter() - _timers:.2f}s")
+    print("     PERFORM ROLLING MEAN")
+    _timers = time.perf_counter()
     if rolling != 0:
-        ens_data = rolling_mean_data(ens_data, [case_a, case_b], period_len=rolling)
-    print("LAUNCH CLIENT")
-    # client = Client(n_workers=n_iter // 1.1)
-    # _workers = 36 * nnodes
-    # _workers = 64
+        ens_data = rolling_mean_data(ens_data[dvars], period_len=rolling)
 
-    # with Client(n_workers=_workers, processes=True, interface="lo") as client:
-    cluster = SLURMCluster(
-        queue="debug",
-        account="e3sm",
-        cores=128,
-        memory="250GB",
-    )
-    print("SCALE CLUSTER")
-    cluster.scale(jobs=nnodes)
-    print(cluster)
+    _emin = ens_data.ens.values.min()
+    _emax = ens_data.ens.values.max()
 
-    with Client(
-        cluster,
-        # n_workers=_workers, threads_per_worker=1, processes=True, interface="ib0"
-    ) as client:
-        print(client)
-        print(f"PERFORM {n_iter} TESTS")
-        ks_stat, ks_pval, rnd_indx, test_vars = test_bootstrap(
-            ens_data,
-            [case_a, case_b],
-            client,
-            stat_test=ks_all_times,
-            n_iter=n_iter,
-            permute=permute,
-            test_size=test_size,
-        )
-        time.sleep(1)
-        cvm_stat, cvm_pval, rnd_indx, test_vars = test_bootstrap(
-            ens_data,
-            [case_a, case_b],
-            client,
-            stat_test=ks_all_times,
-            n_iter=n_iter,
-            permute=permute,
-            test_size=test_size,
-            random_index=rnd_indx.tolist(),
-        )
-        print("OUTPUT TO FILE")
-        ds_out = output_data(
-            stats=[ks_stat, cvm_stat],
-            pvals=[ks_pval, cvm_pval],
-            rnd_idx=rnd_indx,
-            times=ens_data[case_a]["time"],
-            data_vars=test_vars,
-            test_names=["ks", "cvm"],
-        )
-        if rolling == 0:
-            run_shape = run_len
-        else:
-            run_shape = f"{run_len}_{rolling}avg"
-        # if test_size != 30:
-        run_shape += f"_ts{test_size}"
+    # If the two ensembles are the same, don't repeat between the two
+    if case_a == case_b:
+        unique = True
+    else:
+        unique = False
 
-        out_dir = Path("bootstrap_data")
-        ds_out.to_netcdf(
-            Path(
-                out_dir,
-                f"bootstrap_output.{run_shape}.{case_a}_{case_b}_n{n_iter}.nc",
+    ens_sel = [
+        randomise_new(_emin, _emax, ens_size=test_size, ncases=2, uniq=unique)
+        for _ in range(n_iter)
+    ]
+    print(f"       IN {time.perf_counter() - _timers:.2f}s")
+
+    ks_test_vec = np.vectorize(ks_pval, signature="(n),(n)->()")
+    cvm_test_vec = np.vectorize(cvm_2samp, signature="(n),(n)->()")
+    # anderson_test_vec = np.vectorize(anderson_pval, signature="(n),(n)->()")
+
+    print("     PERFORM BOOTSTRAPS")
+
+    tests = {
+        "ks": "Kolmogorov-Smirnov",
+        "cvm": "Cramer von Mises",
+        "mw": "Mann-Whitney",
+        "es": "Epps Singleton",
+    }
+
+    partials = {
+        "ks": partial(bootstrap_test, data=ens_data[dvars], test_fcn=ks_test_vec),
+        "cvm": partial(bootstrap_test, data=ens_data[dvars], test_fcn=cvm_test_vec),
+        "mw": partial(bootstrap_test, data=ens_data[dvars], test_fcn=mannwhitney),
+        "es": partial(bootstrap_test, data=ens_data[dvars], test_fcn=epps_singleton),
+    }
+
+    _poolsize = min([mp.cpu_count() - 1, n_iter])
+    with mp.Pool(_poolsize) as pool:
+        pvals_all = {}
+        for test_name in tests:
+            _timers = time.perf_counter()
+            print(f"     BOOTSTRAP {test_name} TEST")
+            pvals_all[test_name] = xr.concat(
+                pool.map(partials[test_name], ens_sel), dim="iter"
             )
+            print(f"      IN {time.perf_counter() - _timers:.2f}s")
+
+    for test_name in pvals_all:
+        pvals_all[test_name] = pvals_to_dataarray(
+            pvals_all[test_name], (test_name, tests[test_name])
         )
+    ds_out = xr.Dataset(pvals_all)
+
+    if ctl_run:
+        out_dir = Path("bootstrap_data_ctl")
+    else:
+        out_dir = Path("bootstrap_data")
+
+    if rolling == 0:
+        run_shape = run_len
+    else:
+        run_shape = f"{run_len}_{rolling}avg"
+    run_shape += f"_ts{test_size}"
+
+    ds_out.to_netcdf(
+        Path(
+            out_dir,
+            f"bootstrap_output.{run_shape}.{case_a}_{case_b}_n{n_iter}.nc",
+        )
+    )
+    print(
+        f"COMPLETED: TOTAL TIME: {(time.perf_counter() - _total_time_s) / 60:.2f} min"
+    )
 
 
 def parse_args():
@@ -668,6 +338,13 @@ def parse_args():
         type=int,
         help="Ensemble size, default=30",
     )
+    parser.add_argument(
+        "--ctl",
+        action="store_true",
+        default=False,
+        help="Write output to bootstrap_data_ctl for use as control bootstrap for threshold finding",
+    )
+
     return parser.parse_args()
 
 
@@ -683,4 +360,5 @@ if __name__ == "__main__":
         rolling=int(cl_args.rolling),
         permute=cl_args.permute,
         test_size=cl_args.esize,
+        ctl_run=cl_args.ctl,
     )
