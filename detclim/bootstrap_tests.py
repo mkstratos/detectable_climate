@@ -7,6 +7,7 @@ import json
 import multiprocessing as mp
 import random
 import time
+import warnings
 from functools import partial
 from pathlib import Path
 
@@ -79,7 +80,10 @@ def load_data(case_dirs, run_len, case_abbr, cases):
 
 
 def ks_pval(data_x, data_y):
-    _res = sts.mstats.ks_2samp(data_x, data_y)
+    with warnings.catch_warnings():
+        # Ignores the warning generated for switching from exact -> asymptoitic method
+        warnings.filterwarnings("ignore")
+        _res = sts.mstats.ks_2samp(data_x, data_y)
     return _res[1]
 
 
@@ -94,10 +98,20 @@ def mannwhitney(data_1, data_2):
     return sts.mannwhitneyu(data_1, data_2, axis=1).pvalue
 
 
+def wilcoxon(data_1, data_2):
+    """Perform a Wiloxon Signed Rank Test, return P-value."""
+    with np.errstate(divide="ignore", invalid="ignore"):
+        return sts.wilcoxon(
+            data_1 - data_2, axis=1
+        ).pvalue  # pyright: ignore[reportAttributeAccessIssue]
+
+
 def epps_singleton(data_1, data_2):
     """Perform a 2 sample Epps Singleton test, return P-value."""
     try:
-        _out = sts.epps_singleton_2samp(data_1, data_2, axis=1).pvalue
+        _out = sts.epps_singleton_2samp(
+            data_1, data_2, axis=1
+        ).pvalue  # pyright: ignore[reportCallIssue]
     except np.linalg.LinAlgError:
         _out = np.ones(data_1.shape[0])
     return _out
@@ -225,7 +239,7 @@ def main(
     _timers = time.perf_counter()
     dvars = json.loads(open("new_vars.json", "r", encoding="utf-8").read())["default"]
     ens_data = load_data(case_dirs, run_len, [case_a, case_b], cases)
-    print(f"       IN {time.perf_counter() - _timers:.2f}s")
+    print(f"       LOAD IN {time.perf_counter() - _timers:.2f}s")
     print("     PERFORM ROLLING MEAN")
     _timers = time.perf_counter()
     if rolling != 0:
@@ -244,42 +258,32 @@ def main(
         randomise_new(_emin, _emax, ens_size=test_size, ncases=2, uniq=unique)
         for _ in range(n_iter)
     ]
-    print(f"       IN {time.perf_counter() - _timers:.2f}s")
+    print(f"       RMEAN IN {time.perf_counter() - _timers:.2f}s")
 
     ks_test_vec = np.vectorize(ks_pval, signature="(n),(n)->()")
     cvm_test_vec = np.vectorize(cvm_2samp, signature="(n),(n)->()")
-    # anderson_test_vec = np.vectorize(anderson_pval, signature="(n),(n)->()")
 
     print("     PERFORM BOOTSTRAPS")
-
-    tests = {
-        "ks": "Kolmogorov-Smirnov",
-        "cvm": "Cramer von Mises",
-        "mw": "Mann-Whitney",
-        "es": "Epps Singleton",
-    }
 
     partials = {
         "ks": partial(bootstrap_test, data=ens_data[dvars], test_fcn=ks_test_vec),
         "cvm": partial(bootstrap_test, data=ens_data[dvars], test_fcn=cvm_test_vec),
         "mw": partial(bootstrap_test, data=ens_data[dvars], test_fcn=mannwhitney),
-        "es": partial(bootstrap_test, data=ens_data[dvars], test_fcn=epps_singleton),
+        "wsr": partial(bootstrap_test, data=ens_data[dvars], test_fcn=wilcoxon),
     }
 
     _poolsize = min([mp.cpu_count() - 1, n_iter])
     with mp.Pool(_poolsize) as pool:
         pvals_all = {}
-        for test_name in tests:
+        for test_name, _fcn in partials.items():
             _timers = time.perf_counter()
             print(f"     BOOTSTRAP {test_name} TEST")
-            pvals_all[test_name] = xr.concat(
-                pool.map(partials[test_name], ens_sel), dim="iter"
-            )
-            print(f"      IN {time.perf_counter() - _timers:.2f}s")
+            pvals_all[test_name] = xr.concat(pool.map(_fcn, ens_sel), dim="iter")
+            print(f"      {test_name} IN {time.perf_counter() - _timers:.2f}s")
 
     for test_name in pvals_all:
         pvals_all[test_name] = pvals_to_dataarray(
-            pvals_all[test_name], (test_name, tests[test_name])
+            pvals_all[test_name], (test_name, detclim.STESTS[test_name])
         )
     ds_out = xr.Dataset(pvals_all)
 
@@ -342,7 +346,7 @@ def parse_args():
         "--ctl",
         action="store_true",
         default=False,
-        help="Write output to bootstrap_data_ctl for use as control bootstrap for threshold finding",
+        help="Write output to bootstrap_data_ctl for use as control for threshold finding",
     )
 
     return parser.parse_args()
