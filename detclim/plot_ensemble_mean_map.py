@@ -12,12 +12,6 @@ def main():
     scratch_dir = Path("/lustre/storm/nwp501/proj-shared/mkelleher/e3sm_scratch")
     ctl = "ctl"
     test = "clubb_c1-5p0pct"
-    params_hum = {
-        "effgw_oro": "GW Orog",
-        "clubb_c1": "CLUBB C1",
-        "zmconv_c0_ocn": "ZM Conv C0-Ocean",
-        "ctl": "Control",
-    }
 
     cases = {
         ctl: "2025-09-16.F2010.ne30pg2_r05_oECv3_control",
@@ -48,7 +42,6 @@ def main():
     dvar = "CLDLIQ"
     title_props = {"fontsize": 8}
     _figwidth = 12.5 / 2.54
-    plot_3panel = False
 
     cbar_props = {"location": "right", "pad": 0.01, "shrink": 0.8}
     _figheight = _figwidth * 1.1

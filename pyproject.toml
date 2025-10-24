@@ -75,7 +75,7 @@ dependencies = [
 dynamic = ["version"]
 
 [project.optional-dependencies]
-dev = ["ruff", "black", "pylint", "isort", "pytest"]
+dev = ["ruff", "black", "pylint", "isort", "pytest", "pre-commit>=4.3.0"]
 
 [project.urls]
 Homepage = "https://github.com/mkstratos/detectable_climate"
