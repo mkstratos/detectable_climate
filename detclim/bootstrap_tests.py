@@ -202,6 +202,7 @@ def pvals_to_dataarray(pvals, test_id):
 
 
 def main(
+    indir,
     case_a="ctl",
     case_b="5pct",
     run_len="1year",
@@ -216,9 +217,8 @@ def main(
     with open(Path(detclim.data_path, "case_db.json"), "r", encoding="utf-8") as _cdb:
         cases = json.loads(_cdb.read())
 
-    scratch = Path("/lcrc/group/e3sm/ac.mkelleher/scratch/chrys/")
     case_dirs = {
-        _case: Path(scratch, cases[run_len][_case], "run") for _case in [case_a, case_b]
+        _case: Path(indir, cases[run_len][_case], "run") for _case in [case_a, case_b]
     }
 
     print(f"LOAD DATA for {case_a} x {case_b}")
@@ -344,6 +344,13 @@ def parse_args():
         default=False,
         help="Write output to bootstrap_data_ctl for use as control bootstrap for threshold finding",
     )
+    parser.add_argument(
+        "-i",
+        "--indir",
+        help="Data input directory, if not on LCRC",
+        type=Path,
+        default=Path("/lcrc/group/e3sm/ac.mkelleher/scratch/chrys/"),
+    )
 
     return parser.parse_args()
 
@@ -352,6 +359,7 @@ if __name__ == "__main__":
     cl_args = parse_args()
     # case_a = cl_args.base
     main(
+        indir=cl_args.indir,
         case_a=cl_args.base,
         case_b=cl_args.test,
         run_len=cl_args.runlen,
