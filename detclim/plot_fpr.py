@@ -119,15 +119,15 @@ def main(test_size=30, make_plots=False, ext: str = "png"):
         _, n_reject, n_reject_cr, _, _ = compute_cases(cases, files, stest=stest)
 
         false_positives = {
-            _key[0]
-            .replace("%", r"\%")
-            .replace("_", " "): np.sum(n_reject[_key][:, :] > ctl_thr[stest], axis=0)
+            _key[0].replace("%", r"\%").replace("_", " "): np.sum(
+                n_reject[_key][:, :] > ctl_thr[stest], axis=0
+            )
             for _key in n_reject
         }
         false_positives_cr = {
-            _key[0]
-            .replace("%", r"\%")
-            .replace("_", " "): np.sum(n_reject_cr[_key][:, :] > 0, axis=0)
+            _key[0].replace("%", r"\%").replace("_", " "): np.sum(
+                n_reject_cr[_key][:, :] > 0, axis=0
+            )
             for _key in n_reject_cr
         }
 
@@ -180,9 +180,7 @@ def main(test_size=30, make_plots=False, ext: str = "png"):
             estimator=_estr,
             errorbar=("ci", ptile),
             ax=axis,
-            palette=[
-                ornl_colours.get(_color) for _color in ["teal", "orange"]
-            ],  # pyright: ignore[reportArgumentType]
+            palette=[ornl_colours.get(_color) for _color in ["teal", "orange"]],  # pyright: ignore[reportArgumentType]
             saturation=1.0,
         )
         axis.axhline(niter * ALPHA, ls="--", lw=2, color="k", zorder=0)

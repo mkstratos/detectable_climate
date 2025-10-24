@@ -101,17 +101,13 @@ def mannwhitney(data_1, data_2):
 def wilcoxon(data_1, data_2):
     """Perform a Wiloxon Signed Rank Test, return P-value."""
     with np.errstate(divide="ignore", invalid="ignore"):
-        return sts.wilcoxon(
-            data_1 - data_2, axis=1
-        ).pvalue  # pyright: ignore[reportAttributeAccessIssue]
+        return sts.wilcoxon(data_1 - data_2, axis=1).pvalue  # pyright: ignore[reportAttributeAccessIssue]
 
 
 def epps_singleton(data_1, data_2):
     """Perform a 2 sample Epps Singleton test, return P-value."""
     try:
-        _out = sts.epps_singleton_2samp(
-            data_1, data_2, axis=1
-        ).pvalue  # pyright: ignore[reportCallIssue]
+        _out = sts.epps_singleton_2samp(data_1, data_2, axis=1).pvalue  # pyright: ignore[reportCallIssue]
     except np.linalg.LinAlgError:
         _out = np.ones(data_1.shape[0])
     return _out

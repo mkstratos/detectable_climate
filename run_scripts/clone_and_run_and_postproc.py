@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-"""Clone a run, submit the case, postprocess, (todo: do the KS Test bootstrapping).
-"""
+"""Clone a run, submit the case, postprocess, (todo: do the KS Test bootstrapping)."""
+
 import argparse
 import datetime as dt
 import json

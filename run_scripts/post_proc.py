@@ -89,7 +89,6 @@ def nco_aavg(in_file, overwrite=False, debug_only=True):
 
 
 def combine_files(ninst, file_dir):
-
     for i in range(1, ninst + 1):
         _files = sorted(Path(file_dir).glob(f"*eam_{i:04d}*aavg.nc"))
         # print(_files[0])

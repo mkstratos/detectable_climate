@@ -47,7 +47,6 @@ def print_cmd(cmd):
 
 
 def combine_files(ninst, file_dir, file_s=None, file_e=None):
-
     for i in range(1, ninst + 1):
         _files = sorted(Path(file_dir).glob(f"*eam_{i:04d}*aavg.nc"))
         _files = _files[file_s:file_e]

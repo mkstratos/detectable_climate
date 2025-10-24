@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 COMPONENT_NAMES = ["ATM", "CPL", "OCN", "WAV", "GLC", "ICE", "ROF", "LND", "ESP", "IAC"]
-"ATM" "CPL" "OCN" "WAV" "GLC" "ICE" "ROF" "LND" "ESP" "IAC"
+"ATMCPLOCNWAVGLCICEROFLNDESPIAC"
 # INIT_COND_FILE_TEMPLATE = "20210915.v2.ne4_oQU240.F2010.{}.{}.0003-{:02d}-01-00000.nc"
 # 20231002.F2010.ne4_oQU240_init.elm.h0.0002-07.nc
 INIT_COND_FILE_TEMPLATE = "20231002.F2010.ne4_oQU240_init.{}.{}.0003-{:02d}-01-00000.nc"
@@ -104,7 +104,7 @@ def main(build_case=False, run_case=False):
         f"--compiler {compiler}",
     ]
 
-    print(f"{'*'*20}CREATING CASE{'*'*20}")
+    print(f"{'*' * 20}CREATING CASE{'*' * 20}")
     print(" ".join(create_script))
     os.system(" ".join(create_script))
     os.chdir(case_dir)
@@ -120,12 +120,12 @@ def main(build_case=False, run_case=False):
 
     # Generate user namelists to modify parameters for each ensemble member
     for iinst in range(1, ninst + 1):
-        with open(
-            "user_nl_{}_{:04d}".format(model_component, iinst), "w"
-        ) as nl_atm_file, open(
-            "user_nl_{}_{:04d}".format("elm", iinst), "w"
-        ) as nl_lnd_file:
-
+        with (
+            open(
+                "user_nl_{}_{:04d}".format(model_component, iinst), "w"
+            ) as nl_atm_file,
+            open("user_nl_{}_{:04d}".format("elm", iinst), "w") as nl_lnd_file,
+        ):
             fatm_in = Path(
                 csmdata_atm,
                 INIT_COND_FILE_TEMPLATE.format("eam", "i", 1),
